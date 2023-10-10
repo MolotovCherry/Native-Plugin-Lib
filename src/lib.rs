@@ -1,4 +1,4 @@
-use std::{error::Error, ffi::OsString, os::windows::prelude::OsStringExt};
+use std::{error::Error, ffi::OsString, os::windows::prelude::OsStringExt, str::Utf8Error};
 
 use windows::{
     core::{PCSTR, PCWSTR},
@@ -11,6 +11,34 @@ use windows::{
 pub struct Plugin {
     pub name: [u8; 128],
     pub description: [u8; 512],
+}
+
+impl Plugin {
+    pub fn get_name(&self) -> Result<&str, Utf8Error> {
+        let end = self
+            .name
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(self.name.len())
+            .saturating_sub(1);
+
+        let name = &self.name[..=end];
+
+        std::str::from_utf8(name)
+    }
+
+    pub fn get_description(&self) -> Result<&str, Utf8Error> {
+        let end = self
+            .description
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(self.description.len())
+            .saturating_sub(1);
+
+        let description = &self.description[..=end];
+
+        std::str::from_utf8(description)
+    }
 }
 
 /// Define a plugin's name and description
