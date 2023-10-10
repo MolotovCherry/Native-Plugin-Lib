@@ -2,7 +2,10 @@ use std::{error::Error, ffi::OsString, os::windows::prelude::OsStringExt, str::U
 
 use windows::{
     core::{PCSTR, PCWSTR},
-    Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, DONT_RESOLVE_DLL_REFERENCES},
+    Win32::{
+        Foundation::FreeLibrary,
+        System::LibraryLoader::{GetProcAddress, LoadLibraryExW, DONT_RESOLVE_DLL_REFERENCES},
+    },
 };
 
 /// Plugin details
@@ -103,16 +106,20 @@ pub fn get_plugin_data<P: AsRef<str>>(dll: P) -> Result<Plugin, Box<dyn Error>> 
     let path = PCWSTR(path.as_ptr());
 
     // DONT_RESOLVE_DLL_REFERENCES - Don't call DllMain when loading
-    let handle = unsafe { LoadLibraryExW(path, None, DONT_RESOLVE_DLL_REFERENCES)? };
+    let module = unsafe { LoadLibraryExW(path, None, DONT_RESOLVE_DLL_REFERENCES)? };
 
     // function name we have to get the plugin details
     let symbol = "get_plugin\0";
 
     let get_plugin =
-        unsafe { GetProcAddress(handle, PCSTR(symbol.as_ptr())).ok_or("Failed to get address")? };
+        unsafe { GetProcAddress(module, PCSTR(symbol.as_ptr())).ok_or("Failed to get address")? };
 
     let plugin = unsafe { &*(get_plugin() as *const Plugin) };
     let plugin = (*plugin).clone();
+
+    unsafe {
+        FreeLibrary(module)?;
+    }
 
     Ok(plugin)
 }
