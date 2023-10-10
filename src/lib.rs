@@ -45,10 +45,8 @@ impl Plugin {
 }
 
 /// Define a plugin's name and description
-/// name can be 128-1 characters long, whereas
-/// description can be 512-1 characters long
-///
-/// The last byte is reserved for \0!
+/// name can be 128 characters long, whereas
+/// description can be 512 characters long
 #[macro_export]
 macro_rules! declare_plugin {
     ($name:literal, $desc:literal) => {
