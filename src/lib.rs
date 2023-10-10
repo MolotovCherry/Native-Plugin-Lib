@@ -6,6 +6,7 @@ use std::{
 use libloading::{Library, Symbol};
 
 /// Plugin details
+#[derive(Debug)]
 #[repr(C)]
 pub struct Plugin {
     pub name: [u8; 128],
