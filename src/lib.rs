@@ -8,8 +8,8 @@ use libloading::{Library, Symbol};
 /// Plugin details
 #[repr(C)]
 pub struct Plugin {
-    name: [u8; 128],
-    description: [u8; 512],
+    pub name: [u8; 128],
+    pub description: [u8; 512],
 }
 
 /// Define a plugin's name and description
@@ -18,10 +18,10 @@ pub struct Plugin {
 ///
 /// The last byte is reserved for \0!
 #[macro_export]
-macro_rules! plugin {
+macro_rules! declare_plugin {
     ($name:literal, $desc:literal) => {
         #[no_mangle]
-        static PLUGIN: Plugin = Plugin {
+        static PLUGIN: $crate::Plugin = $crate::Plugin {
             name: $crate::convert_str::<128>($name),
             description: $crate::convert_str::<512>($desc),
         };
