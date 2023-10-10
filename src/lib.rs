@@ -52,15 +52,11 @@ impl Plugin {
 #[macro_export]
 macro_rules! declare_plugin {
     ($name:literal, $desc:literal) => {
-        static PLUGIN: $crate::Plugin = $crate::Plugin {
+        #[no_mangle]
+        static PLUGIN_DATA: $crate::Plugin = $crate::Plugin {
             name: $crate::convert_str::<128>($name),
             description: $crate::convert_str::<512>($desc),
         };
-
-        #[no_mangle]
-        pub extern "C" fn get_plugin() -> *const $crate::Plugin {
-            &PLUGIN
-        }
     };
 }
 
@@ -109,12 +105,13 @@ pub fn get_plugin_data<P: AsRef<str>>(dll: P) -> Result<Plugin, Box<dyn Error>> 
     let module = unsafe { LoadLibraryExW(path, None, DONT_RESOLVE_DLL_REFERENCES)? };
 
     // function name we have to get the plugin details
-    let symbol = "get_plugin\0";
+    let symbol = "PLUGIN_DATA\0";
 
-    let get_plugin =
-        unsafe { GetProcAddress(module, PCSTR(symbol.as_ptr())).ok_or("Failed to get address")? };
+    let plugin_data =
+        unsafe { GetProcAddress(module, PCSTR(symbol.as_ptr())).ok_or("Failed to get address")? }
+            as *const Plugin;
 
-    let plugin = unsafe { &*(get_plugin() as *const Plugin) };
+    let plugin = unsafe { &*plugin_data };
     let plugin = (*plugin).clone();
 
     unsafe {
