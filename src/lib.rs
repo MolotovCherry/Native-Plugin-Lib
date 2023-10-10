@@ -26,6 +26,11 @@ macro_rules! declare_plugin {
             name: $crate::convert_str::<128>($name),
             description: $crate::convert_str::<512>($desc),
         };
+
+        #[no_mangle]
+        pub extern "C" fn get_plugin() -> *const $crate::Plugin {
+            &PLUGIN
+        }
     };
 }
 
