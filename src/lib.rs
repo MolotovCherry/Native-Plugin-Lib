@@ -17,6 +17,7 @@ pub struct Plugin {
 /// description can be 512-1 characters long
 ///
 /// The last byte is reserved for \0!
+#[macro_export]
 macro_rules! plugin {
     ($name:literal, $desc:literal) => {
         #[no_mangle]
