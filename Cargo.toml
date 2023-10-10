@@ -7,4 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-libloading = "0.8.1"
+
+[dependencies.windows]
+version = "0.51.1"
+features = ["Win32_System_LibraryLoader", "Win32_Foundation"]

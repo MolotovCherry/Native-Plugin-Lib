@@ -1,12 +1,12 @@
-use std::{
-    ffi::{OsStr, OsString},
-    os::windows::prelude::OsStringExt,
+use std::{error::Error, ffi::OsString, os::windows::prelude::OsStringExt};
+
+use windows::{
+    core::{PCSTR, PCWSTR},
+    Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, DONT_RESOLVE_DLL_REFERENCES},
 };
 
-use libloading::{Library, Symbol};
-
 /// Plugin details
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Plugin {
     pub name: [u8; 128],
@@ -21,7 +21,6 @@ pub struct Plugin {
 #[macro_export]
 macro_rules! declare_plugin {
     ($name:literal, $desc:literal) => {
-        #[no_mangle]
         static PLUGIN: $crate::Plugin = $crate::Plugin {
             name: $crate::convert_str::<128>($name),
             description: $crate::convert_str::<512>($desc),
@@ -46,9 +45,14 @@ unsafe extern "C-unwind" fn get_plugin_data_c(dll: *const u16) -> *const Plugin 
     let slice = std::slice::from_raw_parts(dll, len);
 
     let dll = OsString::from_wide(slice);
-    if let Ok(plugin) = get_plugin_data(dll) {
-        let plugin = Box::leak(Box::new(plugin));
-        plugin as *const _
+    let dll = dll.to_str();
+    if let Some(dll) = dll {
+        if let Ok(plugin) = get_plugin_data(dll) {
+            let plugin = Box::leak(Box::new(plugin));
+            plugin as *const _
+        } else {
+            std::ptr::null()
+        }
     } else {
         std::ptr::null()
     }
@@ -64,16 +68,23 @@ unsafe extern "C-unwind" fn free_plugin(plugin: *mut Plugin) {
 }
 
 /// Rust function to get plugin data from from a plugin dll
-pub fn get_plugin_data<P: AsRef<OsStr>>(dll: P) -> Result<Plugin, libloading::Error> {
-    let plugin = unsafe {
-        let lib = Library::new(dll)?;
-        let data: Symbol<Plugin> = lib.get(b"PLUGIN\0")?;
+pub fn get_plugin_data<P: AsRef<str>>(dll: P) -> Result<Plugin, Box<dyn Error>> {
+    let mut path: Vec<u16> = dll.as_ref().encode_utf16().collect();
+    path.push(b'\0' as u16);
 
-        Plugin {
-            name: data.name,
-            description: data.description,
-        }
-    };
+    let path = PCWSTR(path.as_ptr());
+
+    // DONT_RESOLVE_DLL_REFERENCES - Don't call DllMain when loading
+    let handle = unsafe { LoadLibraryExW(path, None, DONT_RESOLVE_DLL_REFERENCES)? };
+
+    // function name we have to get the plugin details
+    let symbol = "get_plugin\0";
+
+    let get_plugin =
+        unsafe { GetProcAddress(handle, PCSTR(symbol.as_ptr())).ok_or("Failed to get address")? };
+
+    let plugin = unsafe { &*(get_plugin() as *const Plugin) };
+    let plugin = (*plugin).clone();
 
     Ok(plugin)
 }
