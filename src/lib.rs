@@ -35,7 +35,7 @@ macro_rules! declare_plugin {
 /// # Safety
 /// `dll` must be a null terminated utf-16 string
 #[no_mangle]
-pub unsafe extern "C-unwind" fn get_plugin_data_c(dll: *const u16) -> *const Plugin {
+unsafe extern "C-unwind" fn get_plugin_data_c(dll: *const u16) -> *const Plugin {
     let len = (0..).take_while(|&i| *dll.offset(i) != 0).count();
     let slice = std::slice::from_raw_parts(dll, len);
 
@@ -53,7 +53,7 @@ pub unsafe extern "C-unwind" fn get_plugin_data_c(dll: *const u16) -> *const Plu
 /// # Safety
 /// Must be pointer to a valid instance of Plugin
 #[no_mangle]
-pub unsafe extern "C-unwind" fn free_plugin(plugin: *mut Plugin) {
+unsafe extern "C-unwind" fn free_plugin(plugin: *mut Plugin) {
     _ = Box::from_raw(plugin);
 }
 
