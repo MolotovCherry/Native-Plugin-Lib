@@ -1,4 +1,6 @@
-use std::{error::Error, ffi::OsString, os::windows::prelude::OsStringExt, str::Utf8Error};
+use std::{
+    error::Error, ffi::OsString, os::windows::prelude::OsStringExt, path::Path, str::Utf8Error,
+};
 
 use windows::{
     core::{PCSTR, PCWSTR},
@@ -93,8 +95,13 @@ unsafe extern "C-unwind" fn free_plugin(plugin: *mut Plugin) {
 }
 
 /// Rust function to get plugin data from from a plugin dll
-pub fn get_plugin_data<P: AsRef<str>>(dll: P) -> Result<Plugin, Box<dyn Error>> {
-    let mut path: Vec<u16> = dll.as_ref().encode_utf16().collect();
+pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<Plugin, Box<dyn Error>> {
+    let dll = dll
+        .as_ref()
+        .to_str()
+        .ok_or("Failed to convert path to string")?;
+
+    let mut path: Vec<u16> = dll.encode_utf16().collect();
     path.push(b'\0' as u16);
 
     let path = PCWSTR(path.as_ptr());
