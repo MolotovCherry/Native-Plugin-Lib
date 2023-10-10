@@ -105,10 +105,14 @@ pub fn get_plugin_data<P: AsRef<str>>(dll: P) -> Result<Plugin, Box<dyn Error>> 
     // function name we have to get the plugin details
     let symbol = "PLUGIN_DATA\0";
 
+    // SAFETY:
+    // Option<fn()> -> *const T, is safe to cast and dereference as long as Option<fn()> is non-null and points to a valid T
+    // https://github.com/rust-lang/unsafe-code-guidelines/issues/440
     let plugin_data =
         unsafe { GetProcAddress(module, PCSTR(symbol.as_ptr())).ok_or("Failed to get address")? }
             as *const Plugin;
 
+    // Safety: If the DLL exported symbol was made from our library and is a plugin, the data should be valid
     let plugin = unsafe { &*plugin_data };
     let plugin = (*plugin).clone();
 
