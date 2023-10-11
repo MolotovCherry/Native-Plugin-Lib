@@ -16,6 +16,7 @@ use windows::{
 #[repr(C)]
 pub struct Plugin {
     pub name: [u8; 128],
+    pub author: [u8; 50],
     pub description: [u8; 512],
     pub version: Version,
 }
@@ -42,6 +43,19 @@ impl Plugin {
         std::str::from_utf8(name)
     }
 
+    pub fn get_author(&self) -> Result<&str, Utf8Error> {
+        let end = self
+            .author
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(self.author.len())
+            .saturating_sub(1);
+
+        let author = &self.author[..=end];
+
+        std::str::from_utf8(author)
+    }
+
     pub fn get_description(&self) -> Result<&str, Utf8Error> {
         let end = self
             .description
@@ -62,9 +76,14 @@ impl Plugin {
 #[macro_export]
 macro_rules! declare_plugin {
     ($name:literal, $desc:literal) => {
+        $crate::declare_plugin!($name, "", $desc);
+    };
+
+    ($name:literal, $author:literal, $desc:literal) => {
         #[no_mangle]
         static PLUGIN_DATA: $crate::Plugin = $crate::Plugin {
             name: $crate::convert_str::<128>($name),
+            author: $crate::convert_str::<50>($author),
             description: $crate::convert_str::<512>($desc),
             version: $crate::Version {
                 major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),

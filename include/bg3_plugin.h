@@ -13,6 +13,7 @@ struct Version {
 /// Plugin details
 struct Plugin {
   uint8_t name[128];
+  uint8_t author[50];
   uint8_t description[512];
   Version version;
 };
