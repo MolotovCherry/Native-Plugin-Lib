@@ -2,6 +2,7 @@ use std::{
     error::Error, ffi::OsString, os::windows::prelude::OsStringExt, path::Path, str::Utf8Error,
 };
 
+use konst::{primitive::parse_u16, unwrap_ctx};
 use windows::{
     core::{PCSTR, PCWSTR},
     Win32::{
@@ -11,11 +12,20 @@ use windows::{
 };
 
 /// Plugin details
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct Plugin {
     pub name: [u8; 128],
     pub description: [u8; 512],
+    pub version: Version,
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct Version {
+    pub major: u16,
+    pub minor: u16,
+    pub patch: u16,
 }
 
 impl Plugin {
@@ -56,6 +66,11 @@ macro_rules! declare_plugin {
         static PLUGIN_DATA: $crate::Plugin = $crate::Plugin {
             name: $crate::convert_str::<128>($name),
             description: $crate::convert_str::<512>($desc),
+            version: $crate::Version {
+                major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
+                minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
+                patch: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_PATCH")),
+            },
         };
     };
 }
@@ -120,8 +135,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<Plugin, Box<dyn Error>>
             as *const Plugin;
 
     // Safety: If the DLL exported symbol was made from our library and is a plugin, the data should be valid
-    let plugin = unsafe { &*plugin_data };
-    let plugin = (*plugin).clone();
+    let plugin = unsafe { *plugin_data };
 
     unsafe {
         FreeLibrary(module)?;
@@ -148,4 +162,8 @@ pub const fn convert_str<const N: usize>(string: &'static str) -> [u8; N] {
     }
 
     arr
+}
+
+pub const fn convert_str_to_u16(string: &'static str) -> u16 {
+    unwrap_ctx!(parse_u16(string))
 }

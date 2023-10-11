@@ -4,10 +4,17 @@
 #include <ostream>
 #include <new>
 
+struct Version {
+  uint16_t major;
+  uint16_t minor;
+  uint16_t patch;
+};
+
 /// Plugin details
 struct Plugin {
   uint8_t name[128];
   uint8_t description[512];
+  Version version;
 };
 
 extern "C" {
