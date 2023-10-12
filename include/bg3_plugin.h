@@ -20,14 +20,15 @@ struct Plugin {
 
 extern "C" {
 
-/// C function to get a plugins data
+/// Get a plugin's data
+///
 /// Takes in a path to the dll, encoded as UTF16
 /// Returns null pointer if it failed, non-null if it succeeded.
 /// If it failed, either the plugin didn't declare it, or it's not a plugin made with Rust BG3 template
 ///
 /// # Safety
 /// `dll` must be a null terminated utf-16 string
-const Plugin *get_plugin_data_c(const uint16_t *dll);
+const Plugin *get_plugin_data(const uint16_t *dll);
 
 /// Free the memory used by Plugin
 ///

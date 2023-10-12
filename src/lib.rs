@@ -94,14 +94,15 @@ macro_rules! declare_plugin {
     };
 }
 
-/// C function to get a plugins data
+/// Get a plugin's data
+///
 /// Takes in a path to the dll, encoded as UTF16
 /// Returns null pointer if it failed, non-null if it succeeded.
 /// If it failed, either the plugin didn't declare it, or it's not a plugin made with Rust BG3 template
 ///
 /// # Safety
 /// `dll` must be a null terminated utf-16 string
-#[no_mangle]
+#[export_name = "get_plugin_data"]
 unsafe extern "C-unwind" fn get_plugin_data_c(dll: *const u16) -> *const Plugin {
     let len = (0..).take_while(|&i| *dll.offset(i) != 0).count();
     let slice = std::slice::from_raw_parts(dll, len);
