@@ -20,7 +20,8 @@ struct Plugin {
 
 extern "C" {
 
-/// C function to get the path to the DLL, encoded as UTF16
+/// C function to get a plugins data
+/// Takes in a path to the dll, encoded as UTF16
 /// Returns null pointer if it failed, non-null if it succeeded.
 /// If it failed, either the plugin didn't declare it, or it's not a plugin made with Rust BG3 template
 ///
