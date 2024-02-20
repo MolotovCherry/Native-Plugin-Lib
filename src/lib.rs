@@ -98,7 +98,7 @@ macro_rules! declare_plugin {
 ///
 /// Takes in a path to the dll, encoded as UTF16
 /// Returns null pointer if it failed, non-null if it succeeded.
-/// If it failed, either the plugin didn't declare it, or it's not a plugin made with Rust BG3 template
+/// If it failed, either the plugin didn't declare it, or it's not a plugin made with Rust Native template
 ///
 /// # Safety
 /// `dll` must be a null terminated utf-16 string
