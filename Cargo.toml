@@ -10,5 +10,5 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 konst = { version = "0.3.8", features = ["parsing"] }
 
 [dependencies.windows]
-version = "0.54.0"
+version = "0.56.0"
 features = ["Win32_System_LibraryLoader", "Win32_Foundation"]
