@@ -15,9 +15,9 @@ use windows::{
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct Plugin {
-    pub name: [u8; 128],
-    pub author: [u8; 50],
-    pub description: [u8; 512],
+    pub name: [u8; 129],
+    pub author: [u8; 51],
+    pub description: [u8; 513],
     pub version: Version,
 }
 
@@ -75,16 +75,12 @@ impl Plugin {
 /// description can be 512 characters long
 #[macro_export]
 macro_rules! declare_plugin {
-    ($name:literal, $desc:literal) => {
-        $crate::declare_plugin!($name, "", $desc);
-    };
-
     ($name:literal, $author:literal, $desc:literal) => {
         #[no_mangle]
         static PLUGIN_DATA: $crate::Plugin = $crate::Plugin {
-            name: $crate::convert_str::<128>($name),
-            author: $crate::convert_str::<50>($author),
-            description: $crate::convert_str::<512>($desc),
+            name: $crate::convert_str::<129>($name),
+            author: $crate::convert_str::<51>($author),
+            description: $crate::convert_str::<513>($desc),
             version: $crate::Version {
                 major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
                 minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
@@ -168,8 +164,8 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<Plugin, Box<dyn Error>>
 /// Convert static string to compile time array
 pub const fn convert_str<const N: usize>(string: &'static str) -> [u8; N] {
     assert!(
-        string.len() <= N,
-        "String len must be <= total available space"
+        string.len() < N,
+        "String len must be < total available space"
     );
 
     let mut arr = [0u8; N];
