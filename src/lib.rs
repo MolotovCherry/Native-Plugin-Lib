@@ -16,10 +16,10 @@ pub use abi_stable::std_types::RStr;
 /// Plugin details
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-pub struct Plugin {
-    pub name: RStr<'static>,
-    pub author: RStr<'static>,
-    pub description: RStr<'static>,
+pub struct Plugin<'a> {
+    pub name: RStr<'a>,
+    pub author: RStr<'a>,
+    pub description: RStr<'a>,
     pub version: Version,
 }
 
@@ -38,7 +38,7 @@ pub struct Version {
 macro_rules! declare_plugin {
     ($name:literal, $author:literal, $desc:literal) => {
         #[no_mangle]
-        static PLUGIN_DATA: $crate::Plugin = $crate::Plugin {
+        static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin<'static> {
             name: $crate::RStr::from_str($name),
             author: $crate::RStr::from_str($author),
             description: $crate::RStr::from_str($desc),
@@ -52,15 +52,15 @@ macro_rules! declare_plugin {
 }
 
 #[derive(Debug, Clone)]
-pub struct PluginGuard {
+pub struct PluginGuard<'a> {
     // these are dropped in defined order
     // module is _last_ so it can unload memory _after_ plugin
-    plugin: Plugin,
+    pub plugin: Plugin<'a>,
     _module: Arc<Module>,
 }
 
-impl Deref for PluginGuard {
-    type Target = Plugin;
+impl<'a> Deref for PluginGuard<'a> {
+    type Target = Plugin<'a>;
 
     fn deref(&self) -> &Self::Target {
         &self.plugin
@@ -87,7 +87,7 @@ impl Drop for Module {
 }
 
 /// Rust function to get plugin data from from a plugin dll
-pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginGuard, Box<dyn Error>> {
+pub fn get_plugin_data<'a, P: AsRef<Path>>(dll: P) -> Result<PluginGuard<'a>, Box<dyn Error>> {
     let dll = dll
         .as_ref()
         .to_str()

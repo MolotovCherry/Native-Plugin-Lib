@@ -15,7 +15,7 @@ pub struct CPlugin {
     pub version: Version,
 }
 
-impl TryFrom<Plugin> for CPlugin {
+impl<'a> TryFrom<Plugin<'a>> for CPlugin {
     type Error = NulError;
 
     fn try_from(value: Plugin) -> Result<Self, Self::Error> {
