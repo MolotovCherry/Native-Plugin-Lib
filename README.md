@@ -9,6 +9,7 @@ For plugin devs, use the `plugin!()` macro to declare your plugin details. For e
 ```rust
 plugin! {
     "MyPLugin",
+    "MyAuthorName",
     "My Plugin Description"
 }
 ```
