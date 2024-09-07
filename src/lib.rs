@@ -1,6 +1,6 @@
 mod c;
 
-use std::{error::Error, iter, ops::Deref, path::Path, sync::Arc};
+use std::{error::Error, iter, path::Path, sync::Arc};
 
 use konst::{primitive::parse_u16, unwrap_ctx};
 use windows::{
@@ -38,7 +38,7 @@ pub struct Version {
 macro_rules! declare_plugin {
     ($name:literal, $author:literal, $desc:literal) => {
         #[no_mangle]
-        static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin<'static> {
+        static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
             name: $crate::RStr::from_str($name),
             author: $crate::RStr::from_str($author),
             description: $crate::RStr::from_str($desc),
@@ -53,34 +53,33 @@ macro_rules! declare_plugin {
 
 #[derive(Debug, Clone)]
 pub struct PluginGuard<'a> {
-    // these are dropped in defined order
-    // module is _last_ so it can unload memory _after_ plugin
-    pub plugin: Plugin<'a>,
-    _module: Arc<Module>,
+    module: Arc<Module<'a>>,
 }
 
-impl<'a> Deref for PluginGuard<'a> {
-    type Target = Plugin<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.plugin
+impl PluginGuard<'_> {
+    pub fn data(&self) -> Plugin<'_> {
+        self.module.data()
     }
 }
 
 // Drop wrapper to handle the module reference
 #[derive(Debug)]
-struct Module(HMODULE);
+struct Module<'a>(HMODULE, Plugin<'a>);
 
-unsafe impl Send for Module {}
-unsafe impl Sync for Module {}
+unsafe impl Send for Module<'_> {}
+unsafe impl Sync for Module<'_> {}
 
-impl From<HMODULE> for Module {
-    fn from(value: HMODULE) -> Self {
-        Self(value)
+impl<'a> Module<'a> {
+    fn new(value: HMODULE, plugin: Plugin<'a>) -> Self {
+        Self(value, plugin)
+    }
+
+    fn data(&self) -> Plugin<'_> {
+        self.1
     }
 }
 
-impl Drop for Module {
+impl Drop for Module<'_> {
     fn drop(&mut self) {
         _ = unsafe { FreeLibrary(self.0) };
     }
@@ -106,14 +105,13 @@ pub fn get_plugin_data<'a, P: AsRef<Path>>(dll: P) -> Result<PluginGuard<'a>, Bo
     // Option<fn()> -> *const T, is safe to cast and dereference as long as Option<fn()> is non-null and points to a valid T
     // https://github.com/rust-lang/unsafe-code-guidelines/issues/440
     let plugin_data = unsafe { GetProcAddress(module, PCSTR(symbol.as_ptr())) };
-    let plugin_data = plugin_data.ok_or("plugin data unexpectedly null")? as *const Plugin;
+    let plugin_data = plugin_data.ok_or("plugin data unexpectedly null")? as *const Plugin<'a>;
 
     // Safety: If the DLL exported symbol was made from our library and is a plugin, the data should be valid
     let plugin = unsafe { *plugin_data };
 
-    let guard = PluginGuard {
-        plugin,
-        _module: Arc::new(module.into()),
+    let guard: PluginGuard<'a> = PluginGuard {
+        module: Arc::new(Module::new(module, plugin)),
     };
 
     Ok(guard)

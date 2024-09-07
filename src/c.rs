@@ -51,7 +51,7 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16) -> *const CPlugin {
 
     match dll {
         Some(Ok(plugin)) => {
-            let Ok(plugin): Result<CPlugin, _> = plugin.plugin.try_into() else {
+            let Ok(plugin): Result<CPlugin, _> = plugin.data().try_into() else {
                 return ptr::null();
             };
 
