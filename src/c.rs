@@ -1,32 +1,31 @@
 use std::{
-    ffi::{c_char, CString, NulError, OsString},
+    ffi::{c_char, OsString},
     os::windows::prelude::OsStringExt as _,
     ptr, slice,
 };
 
-use crate::{get_plugin_data as _get_plugin_data, Plugin, Version};
+use abi_stable::std_types::RStr;
 
-/// Plugin details
-#[derive(Debug)]
-pub struct CPlugin {
-    pub name: CString,
-    pub author: CString,
-    pub description: CString,
-    pub version: Version,
+use crate::{get_plugin_data as _get_plugin_data, PluginGuard, Version};
+
+/// A plugin string.
+///
+/// # Safety
+/// This points to a valid utf-8 string
+/// This does not contain a null terminator
+/// This is only valid for reads up to `len`
+#[repr(C)]
+struct PluginStr {
+    ptr: *const c_char,
+    len: usize,
 }
 
-impl<'a> TryFrom<Plugin<'a>> for CPlugin {
-    type Error = NulError;
-
-    fn try_from(value: Plugin) -> Result<Self, Self::Error> {
-        let s = Self {
-            name: CString::new(value.name.as_str())?,
-            author: CString::new(value.author.as_str())?,
-            description: CString::new(value.description.as_str())?,
-            version: value.version,
-        };
-
-        Ok(s)
+impl PluginStr {
+    fn new(data: &RStr<'_>) -> Self {
+        Self {
+            ptr: data.as_ptr().cast(),
+            len: data.len(),
+        }
     }
 }
 
@@ -40,7 +39,7 @@ impl<'a> TryFrom<Plugin<'a>> for CPlugin {
 /// # Safety
 /// `dll` must be a null terminated utf-16 string
 #[no_mangle]
-unsafe extern "C" fn get_plugin_data(dll: *const u16) -> *const CPlugin {
+unsafe extern "C" fn get_plugin_data(dll: *const u16) -> *const PluginGuard<'static> {
     let len = (0..)
         .take_while(|&i| unsafe { *dll.offset(i) } != 0)
         .count();
@@ -51,14 +50,11 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16) -> *const CPlugin {
 
     match dll {
         Some(Ok(plugin)) => {
-            let Ok(plugin): Result<CPlugin, _> = plugin.data().try_into() else {
-                return ptr::null();
-            };
-
             let plugin = Box::leak(Box::new(plugin));
+
             // it leads to UB to directly cast to *const here, or to reborrow as shared ref,
             // as it loses its rw provenance
-            plugin as *mut _ as *const _
+            plugin as *mut _ as _
         }
 
         _ => ptr::null(),
@@ -68,48 +64,48 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16) -> *const CPlugin {
 /// Get the plugin name
 ///
 /// # Safety
-/// Must be pointer to a valid instance of CPlugin
+/// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn name(plugin: *const CPlugin) -> *const c_char {
+unsafe extern "C" fn name(plugin: *const PluginGuard<'static>) -> PluginStr {
     let plugin = unsafe { &*plugin };
-    plugin.name.as_ptr()
+    PluginStr::new(&plugin.data().name)
 }
 
 /// Get the plugin author
 ///
 /// # Safety
-/// Must be pointer to a valid instance of CPlugin
+/// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn author(plugin: *const CPlugin) -> *const c_char {
+unsafe extern "C" fn author(plugin: *const PluginGuard<'static>) -> PluginStr {
     let plugin = unsafe { &*plugin };
-    plugin.author.as_ptr()
+    PluginStr::new(&plugin.data().author)
 }
 
 /// Get the plugin description
 ///
 /// # Safety
-/// Must be pointer to a valid instance of CPlugin
+/// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn description(plugin: *const CPlugin) -> *const c_char {
+unsafe extern "C" fn description(plugin: *const PluginGuard<'static>) -> PluginStr {
     let plugin = unsafe { &*plugin };
-    plugin.description.as_ptr()
+    PluginStr::new(&plugin.data().description)
 }
 
 /// Get the plugin version
 ///
 /// # Safety
-/// Must be pointer to a valid instance of CPlugin
+/// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn version(plugin: *const CPlugin) -> *const Version {
+unsafe extern "C" fn version(plugin: *const PluginGuard<'static>) -> *const Version {
     let plugin = unsafe { &*plugin };
-    &plugin.version
+    &plugin.data().version
 }
 
-/// Free the memory used by CPlugin
+/// Free the memory used by PluginGuard
 ///
 /// # Safety
-/// Must be pointer to a valid instance of CPlugin
+/// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn free_plugin(plugin: *const CPlugin) {
-    drop(unsafe { Box::from_raw(plugin as *mut CPlugin) });
+unsafe extern "C" fn free_plugin(plugin: *const PluginGuard<'_>) {
+    drop(unsafe { Box::from_raw(plugin as *mut PluginGuard) });
 }

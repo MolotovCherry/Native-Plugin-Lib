@@ -3,10 +3,20 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef struct PluginGuard PluginGuard;
+
 /**
- * Plugin details
+ * A plugin string.
+ *
+ * # Safety
+ * This points to a valid utf-8 string
+ * This does not contain a null terminator
+ * This is only valid for reads up to `len`
  */
-typedef struct CPlugin CPlugin;
+typedef struct PluginStr {
+  const char *ptr;
+  uintptr_t len;
+} PluginStr;
 
 typedef struct Version {
   uint16_t major;
@@ -29,47 +39,47 @@ extern "C" {
  * # Safety
  * `dll` must be a null terminated utf-16 string
  */
-const struct CPlugin *get_plugin_data(const uint16_t *dll);
+const struct PluginGuard *get_plugin_data(const uint16_t *dll);
 
 /**
  * Get the plugin name
  *
  * # Safety
- * Must be pointer to a valid instance of CPlugin
+ * Must be pointer to a valid instance of PluginGuard
  */
-const char *name(const struct CPlugin *plugin);
+struct PluginStr name(const struct PluginGuard *plugin);
 
 /**
  * Get the plugin author
  *
  * # Safety
- * Must be pointer to a valid instance of CPlugin
+ * Must be pointer to a valid instance of PluginGuard
  */
-const char *author(const struct CPlugin *plugin);
+struct PluginStr author(const struct PluginGuard *plugin);
 
 /**
  * Get the plugin description
  *
  * # Safety
- * Must be pointer to a valid instance of CPlugin
+ * Must be pointer to a valid instance of PluginGuard
  */
-const char *description(const struct CPlugin *plugin);
+struct PluginStr description(const struct PluginGuard *plugin);
 
 /**
  * Get the plugin version
  *
  * # Safety
- * Must be pointer to a valid instance of CPlugin
+ * Must be pointer to a valid instance of PluginGuard
  */
-const struct Version *version(const struct CPlugin *plugin);
+const struct Version *version(const struct PluginGuard *plugin);
 
 /**
- * Free the memory used by CPlugin
+ * Free the memory used by PluginGuard
  *
  * # Safety
- * Must be pointer to a valid instance of CPlugin
+ * Must be pointer to a valid instance of PluginGuard
  */
-void free_plugin(const struct CPlugin *plugin);
+void free_plugin(const struct PluginGuard *plugin);
 
 #ifdef __cplusplus
 }  // extern "C"

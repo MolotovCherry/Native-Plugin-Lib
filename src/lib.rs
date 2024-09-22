@@ -13,14 +13,36 @@ use windows::{
 
 pub use abi_stable::std_types::RStr;
 
+/// The plugin data version
+/// cbindgen:ignore
+const VERSION: usize = 1;
+
 /// Plugin details
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct Plugin<'a> {
+    data_ver: usize,
     pub name: RStr<'a>,
     pub author: RStr<'a>,
     pub description: RStr<'a>,
     pub version: Version,
+}
+
+impl Plugin<'_> {
+    pub const fn new(
+        name: &'static str,
+        author: &'static str,
+        description: &'static str,
+        version: Version,
+    ) -> Self {
+        Self {
+            data_ver: VERSION,
+            name: RStr::from_str(name),
+            author: RStr::from_str(author),
+            description: RStr::from_str(description),
+            version,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -38,16 +60,16 @@ pub struct Version {
 macro_rules! declare_plugin {
     ($name:literal, $author:literal, $desc:literal) => {
         #[no_mangle]
-        static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
-            name: $crate::RStr::from_str($name),
-            author: $crate::RStr::from_str($author),
-            description: $crate::RStr::from_str($desc),
-            version: $crate::Version {
+        static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin::new(
+            $name,
+            $author,
+            $desc,
+            $crate::Version {
                 major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
                 minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
                 patch: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_PATCH")),
             },
-        };
+        );
     };
 }
 
