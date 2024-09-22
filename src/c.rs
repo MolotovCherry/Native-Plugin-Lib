@@ -8,6 +8,20 @@ use abi_stable::std_types::RStr;
 
 use crate::{get_plugin_data as _get_plugin_data, PluginGuard, Version};
 
+/// If you want to identify your own plugin,
+/// export a symbol named PLUGIN_DATA containing
+/// this data. PluginStr data must be a statically accessible string
+#[allow(dead_code)]
+#[repr(C)]
+pub struct Plugin {
+    /// This MUST be set to `DATA_VERSION`
+    pub data_ver: usize,
+    pub name: PluginStr,
+    pub author: PluginStr,
+    pub description: PluginStr,
+    pub version: Version,
+}
+
 /// A plugin string.
 ///
 /// # Safety
@@ -15,7 +29,7 @@ use crate::{get_plugin_data as _get_plugin_data, PluginGuard, Version};
 /// This does not contain a null terminator
 /// This is only valid for reads up to `len`
 #[repr(C)]
-struct PluginStr {
+pub struct PluginStr {
     ptr: *const c_char,
     len: usize,
 }

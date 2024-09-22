@@ -14,10 +14,11 @@ use windows::{
 pub use abi_stable::std_types::RStr;
 
 /// The plugin data version
-/// cbindgen:ignore
-const VERSION: usize = 1;
+/// This is used in C interface. Rust users can ignore it
+pub const DATA_VERSION: usize = 1;
 
 /// Plugin details
+/// cbindgen:ignore
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct Plugin<'a> {
@@ -36,7 +37,7 @@ impl Plugin<'_> {
         version: Version,
     ) -> Self {
         Self {
-            data_ver: VERSION,
+            data_ver: DATA_VERSION,
             name: RStr::from_str(name),
             author: RStr::from_str(author),
             description: RStr::from_str(description),
