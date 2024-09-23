@@ -1,10 +1,9 @@
-use core::str;
 use std::{
     ffi::c_char,
     fmt::{self, Display},
     marker::PhantomData,
     ops::Deref,
-    slice,
+    slice, str,
 };
 
 /// A ffi safe rust string.
