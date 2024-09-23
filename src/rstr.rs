@@ -1,5 +1,11 @@
 use core::str;
-use std::{ffi::c_char, marker::PhantomData, ops::Deref, slice};
+use std::{
+    ffi::c_char,
+    fmt::{self, Display},
+    marker::PhantomData,
+    ops::Deref,
+    slice,
+};
 
 /// A ffi safe rust string.
 ///
@@ -23,13 +29,23 @@ impl<'a> RStr<'a> {
             _marker: PhantomData::<&'a ()>,
         }
     }
+
+    pub fn as_str(&self) -> &'a str {
+        let slice = unsafe { slice::from_raw_parts(self.data.cast::<u8>(), self.len) };
+        unsafe { str::from_utf8_unchecked(slice) }
+    }
+}
+
+impl Display for RStr<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 impl<'a> Deref for RStr<'a> {
     type Target = str;
 
     fn deref(&self) -> &'a Self::Target {
-        let slice = unsafe { slice::from_raw_parts(self.data.cast::<u8>(), self.len) };
-        unsafe { str::from_utf8_unchecked(slice) }
+        self.as_str()
     }
 }
