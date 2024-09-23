@@ -26,6 +26,7 @@ pub const DATA_VERSION: usize = 1;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Plugin<'a> {
+    /// This MUST be set to `DATA_VERSION`
     data_ver: usize,
     pub name: RStr<'a>,
     pub author: RStr<'a>,

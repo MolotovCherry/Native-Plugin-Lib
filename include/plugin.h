@@ -11,8 +11,6 @@
  */
 #define DATA_VERSION 1
 
-typedef struct PluginGuard PluginGuard;
-
 /**
  * A ffi safe rust string.
  *
@@ -40,12 +38,23 @@ typedef struct Version {
  * this data.
  */
 typedef struct Plugin {
+  /**
+   * This MUST be set to `DATA_VERSION`
+   */
   uintptr_t data_ver;
   struct RStr name;
   struct RStr author;
   struct RStr description;
   struct Version version;
 } Plugin;
+
+/**
+ * Guard for the plugin data
+ * `data` will be invalid when guard is freed
+ */
+typedef struct PluginGuard {
+  const struct Plugin *data;
+} PluginGuard;
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,38 +73,6 @@ extern "C" {
  */
 const struct PluginGuard *get_plugin_data(const uint16_t *dll,
                                           uintptr_t len);
-
-/**
- * Get the plugin name
- *
- * # Safety
- * Must be pointer to a valid instance of PluginGuard
- */
-struct RStr name(const struct PluginGuard *plugin);
-
-/**
- * Get the plugin author
- *
- * # Safety
- * Must be pointer to a valid instance of PluginGuard
- */
-struct RStr author(const struct PluginGuard *plugin);
-
-/**
- * Get the plugin description
- *
- * # Safety
- * Must be pointer to a valid instance of PluginGuard
- */
-struct RStr description(const struct PluginGuard *plugin);
-
-/**
- * Get the plugin version
- *
- * # Safety
- * Must be pointer to a valid instance of PluginGuard
- */
-const struct Version *version(const struct PluginGuard *plugin);
 
 /**
  * Free the memory used by PluginGuard
