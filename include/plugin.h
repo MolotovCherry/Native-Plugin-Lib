@@ -32,6 +32,21 @@ typedef struct Version {
   uint16_t patch;
 } Version;
 
+/**
+ * Plugin details; DATA_VERSION 1
+ *
+ * If you want to identify your own plugin,
+ * export a symbol named PLUGIN_DATA containing
+ * this data.
+ */
+typedef struct Plugin {
+  uintptr_t data_ver;
+  struct RStr name;
+  struct RStr author;
+  struct RStr description;
+  struct Version version;
+} Plugin;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
