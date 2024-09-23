@@ -1,4 +1,5 @@
 mod c;
+mod rstr;
 
 use std::{error::Error, iter, path::Path, sync::Arc};
 
@@ -11,16 +12,19 @@ use windows::{
     },
 };
 
-pub use abi_stable::std_types::RStr;
+pub use crate::rstr::RStr;
 
 /// The plugin data version
 /// This is used in C interface. Rust users can ignore it
 pub const DATA_VERSION: usize = 1;
 
-/// Plugin details
-/// cbindgen:ignore
-#[derive(Debug, Copy, Clone)]
+/// Plugin details; DATA_VERSION 1
+///
+/// If you want to identify your own plugin,
+/// export a symbol named PLUGIN_DATA containing
+/// this data.
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct Plugin<'a> {
     data_ver: usize,
     pub name: RStr<'a>,

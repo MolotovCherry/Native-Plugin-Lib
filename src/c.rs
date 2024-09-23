@@ -1,62 +1,18 @@
-use std::{
-    ffi::{c_char, OsString},
-    os::windows::prelude::OsStringExt as _,
-    ptr, slice,
-};
+use std::{ffi::OsString, os::windows::prelude::OsStringExt as _, ptr, slice};
 
-use abi_stable::std_types::RStr;
-
-use crate::{get_plugin_data as _get_plugin_data, PluginGuard, Version};
-
-/// If you want to identify your own plugin,
-/// export a symbol named PLUGIN_DATA containing
-/// this data. PluginStr data must be a statically accessible string
-#[allow(dead_code)]
-#[repr(C)]
-pub struct Plugin {
-    /// This MUST be set to `DATA_VERSION`
-    pub data_ver: usize,
-    pub name: PluginStr,
-    pub author: PluginStr,
-    pub description: PluginStr,
-    pub version: Version,
-}
-
-/// A plugin string.
-///
-/// # Safety
-/// This points to a valid utf-8 string
-/// This does not contain a null terminator
-/// This is only valid for reads up to `len`
-#[repr(C)]
-pub struct PluginStr {
-    ptr: *const c_char,
-    len: usize,
-}
-
-impl PluginStr {
-    fn new(data: &RStr<'_>) -> Self {
-        Self {
-            ptr: data.as_ptr().cast(),
-            len: data.len(),
-        }
-    }
-}
+use crate::{get_plugin_data as _get_plugin_data, PluginGuard, RStr, Version};
 
 /// Get a plugin's data
 ///
-/// Takes in a path to the dll, encoded as UTF16
+/// Takes in a path to the dll, encoded as UTF16, with length `len`
 /// Returns null pointer if it failed, non-null if it succeeded.
 /// If it failed, either the plugin didn't declare it, it's not a plugin made with Rust Native template,
 /// or the file does not exist.
 ///
 /// # Safety
-/// `dll` must be a null terminated utf-16 string
+/// `len` must be the correct size
 #[no_mangle]
-unsafe extern "C" fn get_plugin_data(dll: *const u16) -> *const PluginGuard<'static> {
-    let len = (0..)
-        .take_while(|&i| unsafe { *dll.offset(i) } != 0)
-        .count();
+unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const PluginGuard<'static> {
     let slice = unsafe { slice::from_raw_parts(dll, len) };
 
     let dll = OsString::from_wide(slice);
@@ -80,9 +36,9 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16) -> *const PluginGuard<'sta
 /// # Safety
 /// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn name(plugin: *const PluginGuard<'static>) -> PluginStr {
+unsafe extern "C" fn name(plugin: *const PluginGuard<'static>) -> RStr {
     let plugin = unsafe { &*plugin };
-    PluginStr::new(&plugin.data().name)
+    plugin.data().name
 }
 
 /// Get the plugin author
@@ -90,9 +46,9 @@ unsafe extern "C" fn name(plugin: *const PluginGuard<'static>) -> PluginStr {
 /// # Safety
 /// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn author(plugin: *const PluginGuard<'static>) -> PluginStr {
+unsafe extern "C" fn author(plugin: *const PluginGuard<'static>) -> RStr {
     let plugin = unsafe { &*plugin };
-    PluginStr::new(&plugin.data().author)
+    plugin.data().author
 }
 
 /// Get the plugin description
@@ -100,9 +56,9 @@ unsafe extern "C" fn author(plugin: *const PluginGuard<'static>) -> PluginStr {
 /// # Safety
 /// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
-unsafe extern "C" fn description(plugin: *const PluginGuard<'static>) -> PluginStr {
+unsafe extern "C" fn description(plugin: *const PluginGuard<'static>) -> RStr {
     let plugin = unsafe { &*plugin };
-    PluginStr::new(&plugin.data().description)
+    plugin.data().description
 }
 
 /// Get the plugin version

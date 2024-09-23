@@ -14,39 +14,23 @@
 typedef struct PluginGuard PluginGuard;
 
 /**
- * A plugin string.
+ * A ffi safe rust string.
  *
  * # Safety
  * This points to a valid utf-8 string
  * This does not contain a null terminator
  * This is only valid for reads up to `len`
  */
-typedef struct PluginStr {
-  const char *ptr;
+typedef struct RStr {
+  const char *data;
   uintptr_t len;
-} PluginStr;
+} RStr;
 
 typedef struct Version {
   uint16_t major;
   uint16_t minor;
   uint16_t patch;
 } Version;
-
-/**
- * If you want to identify your own plugin,
- * export a symbol named PLUGIN_DATA containing
- * this data. PluginStr data must be a statically accessible string
- */
-typedef struct Plugin {
-  /**
-   * This MUST be set to `DATA_VERSION`
-   */
-  uintptr_t data_ver;
-  struct PluginStr name;
-  struct PluginStr author;
-  struct PluginStr description;
-  struct Version version;
-} Plugin;
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,15 +39,16 @@ extern "C" {
 /**
  * Get a plugin's data
  *
- * Takes in a path to the dll, encoded as UTF16
+ * Takes in a path to the dll, encoded as UTF16, with length `len`
  * Returns null pointer if it failed, non-null if it succeeded.
  * If it failed, either the plugin didn't declare it, it's not a plugin made with Rust Native template,
  * or the file does not exist.
  *
  * # Safety
- * `dll` must be a null terminated utf-16 string
+ * `len` must be the correct size
  */
-const struct PluginGuard *get_plugin_data(const uint16_t *dll);
+const struct PluginGuard *get_plugin_data(const uint16_t *dll,
+                                          uintptr_t len);
 
 /**
  * Get the plugin name
@@ -71,7 +56,7 @@ const struct PluginGuard *get_plugin_data(const uint16_t *dll);
  * # Safety
  * Must be pointer to a valid instance of PluginGuard
  */
-struct PluginStr name(const struct PluginGuard *plugin);
+struct RStr name(const struct PluginGuard *plugin);
 
 /**
  * Get the plugin author
@@ -79,7 +64,7 @@ struct PluginStr name(const struct PluginGuard *plugin);
  * # Safety
  * Must be pointer to a valid instance of PluginGuard
  */
-struct PluginStr author(const struct PluginGuard *plugin);
+struct RStr author(const struct PluginGuard *plugin);
 
 /**
  * Get the plugin description
@@ -87,7 +72,7 @@ struct PluginStr author(const struct PluginGuard *plugin);
  * # Safety
  * Must be pointer to a valid instance of PluginGuard
  */
-struct PluginStr description(const struct PluginGuard *plugin);
+struct RStr description(const struct PluginGuard *plugin);
 
 /**
  * Get the plugin version
