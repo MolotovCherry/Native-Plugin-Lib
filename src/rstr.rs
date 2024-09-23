@@ -20,6 +20,9 @@ pub struct RStr<'a> {
     _marker: PhantomData<&'a ()>,
 }
 
+unsafe impl Send for RStr<'_> {}
+unsafe impl Sync for RStr<'_> {}
+
 impl<'a> RStr<'a> {
     pub(crate) const fn from_str(data: &'a str) -> Self {
         Self {
