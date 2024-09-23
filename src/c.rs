@@ -29,7 +29,7 @@ struct PluginGuard<'a> {
 /// or the file does not exist.
 ///
 /// # Safety
-/// `len` must be the correct size
+/// `len` must be the correct. this is the number of u16 elems, _not_ the number of bytes
 #[no_mangle]
 unsafe extern "C" fn get_plugin_data<'a>(dll: *const u16, len: usize) -> *const PluginGuard<'a> {
     let slice = unsafe { slice::from_raw_parts(dll, len) };

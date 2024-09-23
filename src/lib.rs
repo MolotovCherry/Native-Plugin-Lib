@@ -35,7 +35,9 @@ pub struct Plugin<'a> {
 }
 
 impl Plugin<'_> {
-    pub const fn new(
+    /// # Safety
+    /// strings must have null terminator
+    pub const unsafe fn new(
         name: &'static str,
         author: &'static str,
         description: &'static str,
@@ -43,9 +45,9 @@ impl Plugin<'_> {
     ) -> Self {
         Self {
             data_ver: DATA_VERSION,
-            name: RStr::from_str(name),
-            author: RStr::from_str(author),
-            description: RStr::from_str(description),
+            name: unsafe { RStr::from_str(name) },
+            author: unsafe { RStr::from_str(author) },
+            description: unsafe { RStr::from_str(description) },
             version,
         }
     }
@@ -66,16 +68,18 @@ pub struct Version {
 macro_rules! declare_plugin {
     ($name:literal, $author:literal, $desc:literal) => {
         #[no_mangle]
-        static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin::new(
-            $name,
-            $author,
-            $desc,
-            $crate::Version {
-                major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
-                minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
-                patch: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_PATCH")),
-            },
-        );
+        static PLUGIN_DATA: $crate::Plugin<'static> = unsafe {
+            $crate::Plugin::new(
+                concat!($name, "\0"),
+                concat!($author, "\0"),
+                concat!($desc, "\0"),
+                $crate::Version {
+                    major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
+                    minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
+                    patch: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_PATCH")),
+                },
+            )
+        };
     };
 }
 

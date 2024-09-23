@@ -12,17 +12,14 @@
 #define DATA_VERSION 1
 
 /**
- * A ffi safe rust string.
+ * utf8 null terminated string.
  *
  * # Safety
  * This points to a valid utf-8 string
- * This does not contain a null terminator
- * This is only valid for reads up to `len`
+ * Contains no internal nulls
+ * Contains a null terminator
  */
-typedef struct RStr {
-  const char *data;
-  uintptr_t len;
-} RStr;
+typedef const char *RStr;
 
 typedef struct Version {
   uint16_t major;
@@ -42,9 +39,9 @@ typedef struct Plugin {
    * This MUST be set to `DATA_VERSION`
    */
   uintptr_t data_ver;
-  struct RStr name;
-  struct RStr author;
-  struct RStr description;
+  RStr name;
+  RStr author;
+  RStr description;
   struct Version version;
 } Plugin;
 
@@ -69,7 +66,7 @@ extern "C" {
  * or the file does not exist.
  *
  * # Safety
- * `len` must be the correct size
+ * `len` must be the correct. this is the number of u16 elems, _not_ the number of bytes
  */
 const struct PluginGuard *get_plugin_data(const uint16_t *dll,
                                           uintptr_t len);

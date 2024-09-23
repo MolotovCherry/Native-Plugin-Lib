@@ -1,22 +1,21 @@
 use std::{
-    ffi::c_char,
+    ffi::{c_char, CStr},
     fmt::{self, Display},
     marker::PhantomData,
     ops::Deref,
-    slice, str,
+    str,
 };
 
-/// A ffi safe rust string.
+/// utf8 null terminated string.
 ///
 /// # Safety
 /// This points to a valid utf-8 string
-/// This does not contain a null terminator
-/// This is only valid for reads up to `len`
-#[repr(C)]
+/// Contains no internal nulls
+/// Contains a null terminator
+#[repr(transparent)]
 #[derive(Debug, Copy, Clone)]
 pub struct RStr<'a> {
     data: *const c_char,
-    len: usize,
     _marker: PhantomData<&'a ()>,
 }
 
@@ -24,17 +23,18 @@ unsafe impl Send for RStr<'_> {}
 unsafe impl Sync for RStr<'_> {}
 
 impl<'a> RStr<'a> {
-    pub(crate) const fn from_str(data: &'a str) -> Self {
+    /// # Safety
+    /// string must contain null terminator
+    pub(crate) const unsafe fn from_str(data: &'static str) -> Self {
         Self {
             data: data.as_ptr().cast(),
-            len: data.len(),
             _marker: PhantomData::<&'a ()>,
         }
     }
 
-    pub fn as_str(&self) -> &'a str {
-        let slice = unsafe { slice::from_raw_parts(self.data.cast::<u8>(), self.len) };
-        unsafe { str::from_utf8_unchecked(slice) }
+    fn as_str(&self) -> &'a str {
+        let cstr = unsafe { CStr::from_ptr(self.data) };
+        unsafe { str::from_utf8_unchecked(cstr.to_bytes()) }
     }
 }
 
