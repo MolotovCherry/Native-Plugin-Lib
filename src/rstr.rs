@@ -16,7 +16,7 @@ use std::{
 #[derive(Debug, Copy, Clone)]
 pub struct RStr<'a> {
     data: *const c_char,
-    _marker: PhantomData<&'a ()>,
+    _marker: PhantomData<&'a str>,
 }
 
 unsafe impl Send for RStr<'_> {}
@@ -25,10 +25,11 @@ unsafe impl Sync for RStr<'_> {}
 impl<'a> RStr<'a> {
     /// # Safety
     /// string must contain null terminator
-    pub(crate) const unsafe fn from_str(data: &'static str) -> Self {
+    #[doc(hidden)]
+    pub const unsafe fn from_str(data: &'static str) -> Self {
         Self {
             data: data.as_ptr().cast(),
-            _marker: PhantomData::<&'a ()>,
+            _marker: PhantomData,
         }
     }
 

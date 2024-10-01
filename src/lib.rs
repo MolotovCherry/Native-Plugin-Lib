@@ -15,7 +15,7 @@ use windows::{
 pub use crate::rstr::RStr;
 
 /// The plugin data version
-/// This is used in C interface. Rust users can ignore it
+#[doc(hidden)]
 pub const DATA_VERSION: usize = 1;
 
 /// Plugin details; DATA_VERSION 1
@@ -27,30 +27,12 @@ pub const DATA_VERSION: usize = 1;
 #[derive(Debug, Copy, Clone)]
 pub struct Plugin<'a> {
     /// This MUST be set to `DATA_VERSION`
-    data_ver: usize,
+    #[doc(hidden)]
+    pub data_ver: usize,
     pub name: RStr<'a>,
     pub author: RStr<'a>,
     pub description: RStr<'a>,
     pub version: Version,
-}
-
-impl Plugin<'_> {
-    /// # Safety
-    /// strings must have null terminator
-    pub const unsafe fn new(
-        name: &'static str,
-        author: &'static str,
-        description: &'static str,
-        version: Version,
-    ) -> Self {
-        Self {
-            data_ver: DATA_VERSION,
-            name: unsafe { RStr::from_str(name) },
-            author: unsafe { RStr::from_str(author) },
-            description: unsafe { RStr::from_str(description) },
-            version,
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -67,18 +49,19 @@ pub struct Version {
 #[macro_export]
 macro_rules! declare_plugin {
     ($name:literal, $author:literal, $desc:literal) => {
-        #[no_mangle]
-        static PLUGIN_DATA: $crate::Plugin<'static> = unsafe {
-            $crate::Plugin::new(
-                concat!($name, "\0"),
-                concat!($author, "\0"),
-                concat!($desc, "\0"),
-                $crate::Version {
+        const _: () = {
+            #[no_mangle]
+            static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
+                data_ver: $crate::DATA_VERSION,
+                name: unsafe { $crate::RStr::from_str(concat!($name, "\0")) },
+                author: unsafe { $crate::RStr::from_str(concat!($author, "\0")) },
+                description: unsafe { $crate::RStr::from_str(concat!($desc, "\0")) },
+                version: $crate::Version {
                     major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
                     minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
                     patch: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_PATCH")),
                 },
-            )
+            };
         };
     };
 }
@@ -150,6 +133,7 @@ pub fn get_plugin_data<'a, P: AsRef<Path>>(dll: P) -> Result<PluginGuard<'a>, Bo
 }
 
 /// Convert static string to compile time array
+#[doc(hidden)]
 pub const fn convert_str<const N: usize>(string: &'static str) -> [u8; N] {
     assert!(
         string.len() < N,
@@ -169,6 +153,7 @@ pub const fn convert_str<const N: usize>(string: &'static str) -> [u8; N] {
     arr
 }
 
+#[doc(hidden)]
 pub const fn convert_str_to_u16(string: &'static str) -> u16 {
     unwrap_ctx!(parse_u16(string))
 }
