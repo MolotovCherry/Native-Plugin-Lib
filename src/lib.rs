@@ -45,10 +45,24 @@ pub struct Version {
 
 /// Define a plugin's name, author, and description
 ///
+/// In the crate root file, declare the name, author, and description
+/// ```rs
+/// declare_plugin!("name", "author", "description");
+/// ```
+/// You can also use it without to use the Cargo.toml name, authors, and description fields
+/// ```rs
+/// declare_plugin!();
+/// ```
+///
+/// env!() macro is also possible to use by itself if you need more customization
+/// ```rs
+/// declare_plugin!(env!("CARGO_PKG_NAME"), "author", "description");
+/// ```
+///
 /// The strings must not contain any null bytes in them
 #[macro_export]
 macro_rules! declare_plugin {
-    ($name:literal, $author:literal, $desc:literal) => {
+    ($name:expr, $author:expr, $desc:expr) => {
         const _: () = {
             #[no_mangle]
             static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
@@ -56,6 +70,25 @@ macro_rules! declare_plugin {
                 name: unsafe { $crate::RStr::from_str(concat!($name, "\0")) },
                 author: unsafe { $crate::RStr::from_str(concat!($author, "\0")) },
                 description: unsafe { $crate::RStr::from_str(concat!($desc, "\0")) },
+                version: $crate::Version {
+                    major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
+                    minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
+                    patch: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_PATCH")),
+                },
+            };
+        };
+    };
+
+    () => {
+        const _: () = {
+            #[no_mangle]
+            static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
+                data_ver: $crate::DATA_VERSION,
+                name: unsafe { $crate::RStr::from_str(concat!(env!("CARGO_PKG_NAME"), "\0")) },
+                author: unsafe { $crate::RStr::from_str(concat!(env!("CARGO_PKG_AUTHORS"), "\0")) },
+                description: unsafe {
+                    $crate::RStr::from_str(concat!(env!("CARGO_PKG_DESCRIPTION"), "\0"))
+                },
                 version: $crate::Version {
                     major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
                     minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
