@@ -49,7 +49,7 @@ typedef struct Plugin {
  * `data` will be invalid when guard is freed
  */
 typedef struct PluginGuard {
-  const struct Plugin *data;
+  struct Plugin data;
 } PluginGuard;
 
 #ifdef __cplusplus

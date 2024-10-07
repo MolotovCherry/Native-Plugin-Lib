@@ -15,7 +15,7 @@ use std::{
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone)]
 pub struct RStr<'a> {
-    data: *const c_char,
+    pub(crate) data: *const c_char,
     _marker: PhantomData<&'a str>,
 }
 
@@ -29,6 +29,13 @@ impl<'a> RStr<'a> {
     pub const unsafe fn from_str(data: &'static str) -> Self {
         Self {
             data: data.as_ptr().cast(),
+            _marker: PhantomData,
+        }
+    }
+
+    pub(crate) unsafe fn from_ptr(ptr: *const c_char) -> Self {
+        Self {
+            data: ptr,
             _marker: PhantomData,
         }
     }

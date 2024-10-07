@@ -1,24 +1,19 @@
-use std::{
-    ffi::OsString,
-    os::windows::prelude::OsStringExt as _,
-    ptr::{self, addr_of},
-    slice,
-};
+use std::{ffi::OsString, mem, os::windows::prelude::OsStringExt as _, ptr, slice};
 
-use crate::{get_plugin_data as _get_plugin_data, Plugin, PluginGuard as RPluginGuard};
+use crate::{get_plugin_data as _get_plugin_data, Plugin, PluginData};
 
 /// The real plugin guard
 #[repr(C)]
-struct _PluginGuard<'a> {
-    data: *const Plugin<'a>,
-    _guard: RPluginGuard<'a>,
+struct _PluginGuard {
+    data: Plugin<'static>,
+    _guard: PluginData,
 }
 
 /// Guard for the plugin data
 /// `data` will be invalid when guard is freed
 #[repr(C)]
-struct PluginGuard<'a> {
-    data: *const Plugin<'a>,
+struct PluginGuard {
+    data: Plugin<'static>,
 }
 
 /// Get a plugin's data
@@ -31,7 +26,7 @@ struct PluginGuard<'a> {
 /// # Safety
 /// `len` must be the correct. this is the number of u16 elems, _not_ the number of bytes
 #[no_mangle]
-unsafe extern "C" fn get_plugin_data<'a>(dll: *const u16, len: usize) -> *const PluginGuard<'a> {
+unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const PluginGuard {
     let slice = unsafe { slice::from_raw_parts(dll, len) };
 
     let dll = OsString::from_wide(slice);
@@ -39,9 +34,12 @@ unsafe extern "C" fn get_plugin_data<'a>(dll: *const u16, len: usize) -> *const 
 
     match dll {
         Some(Ok(plugin)) => {
-            let ptr = addr_of!(plugin.module.1);
+            // SAFETY: We're manually handling the reference, 'static is ok
+            let plugin_data =
+                unsafe { mem::transmute::<Plugin<'_>, Plugin<'static>>(plugin.data()) };
+
             let plugin = _PluginGuard {
-                data: ptr,
+                data: plugin_data,
                 _guard: plugin,
             };
 
