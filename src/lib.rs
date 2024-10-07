@@ -4,7 +4,8 @@ mod rstr;
 use std::{
     alloc::{self, Layout},
     ffi::c_char,
-    fs,
+    fs::File,
+    io::{self, Write},
     path::Path,
     ptr, slice,
     sync::LazyLock,
@@ -151,6 +152,37 @@ impl Drop for PluginData {
     }
 }
 
+struct WriteableAlloc {
+    written: usize,
+    size: usize,
+    ptr: *mut u8,
+}
+
+impl Write for WriteableAlloc {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if self.written + buf.len() > self.size {
+            return Err(io::Error::new(io::ErrorKind::WriteZero, "Buffer overflow"));
+        }
+
+        let ptr = unsafe { self.ptr.byte_add(self.written) };
+        unsafe {
+            ptr::copy(buf.as_ptr(), ptr, buf.len());
+        }
+
+        self.written += buf.len();
+        Ok(buf.len())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        _ = self.write(buf)?;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 /// Rust function to get plugin data from from a plugin dll
 pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
     static GRANULARITY: LazyLock<u32> = LazyLock::new(|| {
@@ -162,20 +194,32 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
         info.dwAllocationGranularity
     });
 
-    let data = fs::read(dll)?;
-    let len = data.len();
+    let mut file = File::open(dll)?;
+    let len = file.metadata()?.len() as usize;
+    let gran = (*GRANULARITY as usize).next_power_of_two();
 
-    let layout = unsafe { Layout::from_size_align_unchecked(len, *GRANULARITY as usize) };
+    assert!(gran > 0 && gran.is_power_of_two());
+    assert!(len.next_multiple_of(gran) <= isize::MAX as usize);
+
+    let layout = unsafe { Layout::from_size_align_unchecked(len, gran) };
     let alloc = unsafe { alloc::alloc(layout) };
-    unsafe {
-        ptr::copy_nonoverlapping(data.as_ptr(), alloc, len);
+
+    {
+        let mut write = WriteableAlloc {
+            written: 0,
+            size: len,
+            ptr: alloc,
+        };
+
+        io::copy(&mut file, &mut write)?;
     }
 
-    let slice = unsafe { slice::from_raw_parts(alloc, len) };
+    let data = unsafe { slice::from_raw_parts(alloc, len) };
 
-    let file = PeFile::from_bytes(slice).context("failed to parse file")?;
+    let file = PeFile::from_bytes(&data).context("failed to parse file")?;
     let rva = file
-        .get_export("PLUGIN_DATA")?
+        .get_export("PLUGIN_DATA")
+        .context("symbol not found")?
         .symbol()
         .ok_or(pelite::Error::Null)
         .context("failed to find symbol address")?;
