@@ -113,6 +113,9 @@ pub struct PluginData {
     image_base: u64,
 }
 
+unsafe impl Send for PluginData {}
+unsafe impl Sync for PluginData {}
+
 impl PluginData {
     pub fn data(&self) -> Plugin<'_> {
         let ptr = unsafe { self.alloc.byte_add(self.offset).cast::<Plugin>() };
