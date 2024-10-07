@@ -7,7 +7,6 @@
 
 /**
  * The plugin data version
- * This is used in C interface. Rust users can ignore it
  */
 #define DATA_VERSION 1
 
