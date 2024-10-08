@@ -4,6 +4,7 @@ mod rstr;
 use std::{
     alloc::{self, Layout},
     ffi::c_char,
+    fmt::{self, Debug},
     fs::File,
     io::{self, Write},
     path::Path,
@@ -11,11 +12,11 @@ use std::{
     sync::LazyLock,
 };
 
-use eyre::{bail, Context, Result};
+use eyre::{Context, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use pelite::{
-    pe::{Pe as _, PeFile, Rva},
-    pe64::{exports::GetProcAddress, headers::SectionHeader},
+    pe::{Pe as _, PeFile, Va},
+    pe64::exports::GetProcAddress,
 };
 use windows::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
 
@@ -31,7 +32,7 @@ pub const DATA_VERSION: usize = 1;
 /// export a symbol named PLUGIN_DATA containing
 /// this data.
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Plugin<'a> {
     /// This MUST be set to `DATA_VERSION`
     #[doc(hidden)]
@@ -40,6 +41,17 @@ pub struct Plugin<'a> {
     pub author: RStr<'a>,
     pub description: RStr<'a>,
     pub version: Version,
+}
+
+impl Debug for Plugin<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Plugin")
+            .field("name", &self.name)
+            .field("author", &self.author)
+            .field("description", &self.description)
+            .field("version", &self.version)
+            .finish()
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -109,9 +121,7 @@ macro_rules! declare_plugin {
 pub struct PluginData {
     alloc: *mut u8,
     layout: Layout,
-    offset: usize,
-    section: SectionHeader,
-    image_base: u64,
+    data: Plugin<'static>,
 }
 
 unsafe impl Send for PluginData {}
@@ -119,28 +129,7 @@ unsafe impl Sync for PluginData {}
 
 impl PluginData {
     pub fn data(&self) -> Plugin<'_> {
-        let ptr = unsafe { self.alloc.byte_add(self.offset).cast::<Plugin>() };
-        let plugin = unsafe { &*ptr };
-
-        let plugin = Plugin {
-            data_ver: plugin.data_ver,
-            name: self.get_rstr(plugin.name.data),
-            author: self.get_rstr(plugin.author.data),
-            description: self.get_rstr(plugin.description.data),
-            version: plugin.version,
-        };
-
-        plugin
-    }
-
-    fn get_rstr(&self, ptr: *const c_char) -> RStr<'_> {
-        let rva = (ptr as usize - self.image_base as usize) as Rva;
-        let section_offset = rva - self.section.VirtualAddress;
-        let file_offset = (section_offset + self.section.PointerToRawData) as usize;
-
-        let ptr = unsafe { self.alloc.byte_add(file_offset) };
-
-        unsafe { RStr::from_ptr(ptr.cast()) }
+        self.data
     }
 }
 
@@ -225,27 +214,32 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
         .context("failed to find symbol address")?;
 
     let offset = file.rva_to_file_offset(rva)?;
-    let image_base = file.optional_header().ImageBase;
-    let mut section = None;
 
-    for it in file.section_headers() {
-        let section_name = std::str::from_utf8(it.name_bytes())?;
-        if section_name == ".rdata" {
-            section = Some(*it);
-            break;
-        }
-    }
+    let plugin = {
+        let ptr = unsafe { alloc.byte_add(offset).cast::<Plugin>() };
+        unsafe { *ptr }
+    };
 
-    let Some(section) = section else {
-        bail!(".rdata section not found");
+    let va_to_rstr = |ptr: *const c_char| -> Result<RStr> {
+        let rva = file.va_to_rva(ptr as Va)?;
+        let offset = file.rva_to_file_offset(rva)?;
+        let ptr = unsafe { alloc.byte_add(offset).cast() };
+
+        Ok(unsafe { RStr::from_ptr(ptr) })
+    };
+
+    let plugin = Plugin {
+        data_ver: plugin.data_ver,
+        name: va_to_rstr(plugin.name.data)?,
+        author: va_to_rstr(plugin.author.data)?,
+        description: va_to_rstr(plugin.description.data)?,
+        version: plugin.version,
     };
 
     let data = PluginData {
         alloc,
         layout,
-        offset,
-        section,
-        image_base,
+        data: plugin,
     };
 
     Ok(data)
