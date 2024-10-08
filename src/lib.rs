@@ -217,6 +217,8 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
 
     let plugin = {
         let ptr = unsafe { alloc.byte_add(offset).cast::<Plugin>() };
+        // SAFETY: This is not UB to deref, however touching any RStr is as the internal pointers are wrong
+        //         So do not access them until the address has been translated to a file offset
         unsafe { *ptr }
     };
 
