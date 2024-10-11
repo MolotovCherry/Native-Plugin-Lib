@@ -10,6 +10,8 @@
  */
 #define DATA_VERSION 1
 
+typedef struct PluginData PluginData;
+
 /**
  * utf8 null terminated string.
  *
@@ -45,11 +47,11 @@ typedef struct Plugin {
 } Plugin;
 
 /**
- * Guard for the plugin data
- * `data` will be invalid when guard is freed
+ * Holds the plugin data
  */
 typedef struct PluginGuard {
   struct Plugin data;
+  struct PluginData _reserved;
 } PluginGuard;
 
 #ifdef __cplusplus

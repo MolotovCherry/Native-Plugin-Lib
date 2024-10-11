@@ -2,18 +2,12 @@ use std::{ffi::OsString, mem, os::windows::prelude::OsStringExt as _, ptr, slice
 
 use crate::{get_plugin_data as _get_plugin_data, Plugin, PluginData};
 
-/// The real plugin guard
-#[repr(C)]
-struct _PluginGuard {
-    data: Plugin<'static>,
-    _guard: PluginData,
-}
-
-/// Guard for the plugin data
-/// `data` will be invalid when guard is freed
+/// Holds the plugin data
+/// cbindgen:field-names=[data, _reserved]
 #[repr(C)]
 struct PluginGuard {
     data: Plugin<'static>,
+    _guard: PluginData,
 }
 
 /// Get a plugin's data
@@ -38,7 +32,7 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const Plug
             let plugin_data =
                 unsafe { mem::transmute::<Plugin<'_>, Plugin<'static>>(plugin.data()) };
 
-            let plugin = _PluginGuard {
+            let plugin = PluginGuard {
                 data: plugin_data,
                 _guard: plugin,
             };
@@ -60,5 +54,5 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const Plug
 /// Must be pointer to a valid instance of PluginGuard
 #[no_mangle]
 unsafe extern "C" fn free_plugin(plugin: *const PluginGuard) {
-    drop(unsafe { Box::from_raw(plugin as *mut _PluginGuard) });
+    drop(unsafe { Box::from_raw(plugin as *mut PluginGuard) });
 }
