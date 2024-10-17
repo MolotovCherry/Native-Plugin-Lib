@@ -83,7 +83,7 @@ pub struct Version {
 macro_rules! declare_plugin {
     ($name:expr, $author:expr, $desc:expr) => {
         const _: () = {
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
                 data_ver: $crate::DATA_VERSION,
                 name: unsafe { $crate::RStr::from_str(concat!($name, "\0")) },
@@ -100,7 +100,7 @@ macro_rules! declare_plugin {
 
     () => {
         const _: () = {
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
                 data_ver: $crate::DATA_VERSION,
                 name: unsafe { $crate::RStr::from_str(concat!(env!("CARGO_PKG_NAME"), "\0")) },

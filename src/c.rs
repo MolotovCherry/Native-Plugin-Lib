@@ -19,7 +19,7 @@ struct PluginGuard {
 ///
 /// # Safety
 /// `len` must be the correct. this is the number of u16 elems, _not_ the number of bytes
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const PluginGuard {
     let slice = unsafe { slice::from_raw_parts(dll, len) };
 
@@ -52,7 +52,7 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const Plug
 ///
 /// # Safety
 /// Must be pointer to a valid instance of PluginGuard
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn free_plugin(plugin: *const PluginGuard) {
     drop(unsafe { Box::from_raw(plugin as *mut PluginGuard) });
 }
