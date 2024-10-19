@@ -8,7 +8,8 @@ use std::{
     fs::File,
     io::{self, Write},
     path::Path,
-    ptr, slice,
+    ptr::{self, NonNull},
+    slice,
     sync::LazyLock,
 };
 
@@ -222,7 +223,9 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
         unsafe { *ptr }
     };
 
-    let va_to_rstr = |ptr: *const c_char| -> Result<RStr> {
+    let va_to_rstr = |ptr: NonNull<c_char>| -> Result<RStr> {
+        let ptr = ptr.as_ptr();
+
         let rva = file.va_to_rva(ptr as Va)?;
         let offset = file.rva_to_file_offset(rva)?;
         let ptr = unsafe { alloc.byte_add(offset).cast() };

@@ -3,6 +3,7 @@ use std::{
     fmt::{self, Debug, Display},
     marker::PhantomData,
     ops::Deref,
+    ptr::NonNull,
     str,
 };
 
@@ -15,7 +16,7 @@ use std::{
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct RStr<'a> {
-    pub(crate) data: *const c_char,
+    pub(crate) data: NonNull<c_char>,
     _marker: PhantomData<&'a str>,
 }
 
@@ -27,21 +28,25 @@ impl<'a> RStr<'a> {
     /// string must contain null terminator
     #[doc(hidden)]
     pub const unsafe fn from_str(data: &'static str) -> Self {
+        let ptr = data.as_ptr().cast::<c_char>();
+
         Self {
-            data: data.as_ptr().cast(),
+            data: unsafe { NonNull::new_unchecked(ptr.cast_mut()) },
             _marker: PhantomData,
         }
     }
 
+    /// # Safety
+    /// Ptr must be non-null and have a null terminator
     pub(crate) unsafe fn from_ptr(ptr: *const c_char) -> Self {
         Self {
-            data: ptr,
+            data: unsafe { NonNull::new_unchecked(ptr.cast_mut()) },
             _marker: PhantomData,
         }
     }
 
     fn as_str(&self) -> &'a str {
-        let cstr = unsafe { CStr::from_ptr(self.data) };
+        let cstr = unsafe { CStr::from_ptr(self.data.as_ptr()) };
         unsafe { str::from_utf8_unchecked(cstr.to_bytes()) }
     }
 }
