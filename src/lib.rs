@@ -218,6 +218,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
 
     let plugin = {
         let ptr = unsafe { alloc.byte_add(offset).cast::<Plugin>() };
+        assert!(ptr as usize % align_of::<Plugin>() == 0);
         // SAFETY: This is not UB to deref, however touching any RStr is as the internal pointers are wrong
         //         So do not access them until the address has been translated to a file offset
         unsafe { *ptr }
@@ -228,16 +229,16 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
 
         let rva = file.va_to_rva(ptr as Va)?;
         let offset = file.rva_to_file_offset(rva)?;
-        let ptr = unsafe { alloc.byte_add(offset).cast() };
+        let ptr = unsafe { alloc.byte_add(offset).cast::<c_char>() };
 
         Ok(unsafe { RStr::from_ptr(ptr) })
     };
 
     let plugin = Plugin {
         data_ver: plugin.data_ver,
-        name: va_to_rstr(plugin.name.data)?,
-        author: va_to_rstr(plugin.author.data)?,
-        description: va_to_rstr(plugin.description.data)?,
+        name: va_to_rstr(plugin.name.ptr)?,
+        author: va_to_rstr(plugin.author.ptr)?,
+        description: va_to_rstr(plugin.description.ptr)?,
         version: plugin.version,
     };
 
