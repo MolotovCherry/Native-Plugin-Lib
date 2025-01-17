@@ -1,4 +1,4 @@
-use std::{ffi::OsString, mem, os::windows::prelude::OsStringExt as _, ptr, slice};
+use std::{ffi::OsString, os::windows::prelude::OsStringExt as _, ptr, slice};
 
 use crate::{get_plugin_data as _get_plugin_data, Plugin, PluginData};
 
@@ -29,8 +29,7 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const Plug
     match dll {
         Some(Ok(plugin)) => {
             // SAFETY: We're manually handling the reference, 'static is ok
-            let plugin_data =
-                unsafe { mem::transmute::<Plugin<'_>, Plugin<'static>>(plugin.data()) };
+            let plugin_data = unsafe { plugin.data_unchecked() };
 
             let plugin = PluginGuard {
                 data: plugin_data,

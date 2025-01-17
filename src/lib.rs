@@ -132,6 +132,12 @@ impl PluginData {
     pub fn data(&self) -> Plugin<'_> {
         self.data
     }
+
+    /// # Safety
+    /// You MUST NEVER let the returned data live longer than Self
+    pub(crate) unsafe fn data_unchecked(&self) -> Plugin<'static> {
+        self.data
+    }
 }
 
 impl Drop for PluginData {
