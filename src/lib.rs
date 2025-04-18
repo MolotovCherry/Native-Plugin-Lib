@@ -1,25 +1,23 @@
+mod blob;
 mod c;
 mod rstr;
 
 use std::{
-    alloc::{self, Layout},
     ffi::c_char,
     fmt::{self, Debug},
     fs::File,
-    io::{self, Write},
+    io::Read as _,
     path::Path,
-    ptr::{self, NonNull},
-    slice,
-    sync::LazyLock,
+    ptr::NonNull,
 };
 
+use blob::Blob;
 use eyre::{Context, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use pelite::{
     pe::{Pe as _, PeFile, Va},
     pe64::exports::GetProcAddress,
 };
-use windows::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
 
 pub use crate::rstr::RStr;
 
@@ -120,13 +118,10 @@ macro_rules! declare_plugin {
 }
 
 pub struct PluginData {
-    alloc: *mut u8,
-    layout: Layout,
+    #[allow(unused)]
+    blob: Blob,
     data: Plugin<'static>,
 }
-
-unsafe impl Send for PluginData {}
-unsafe impl Sync for PluginData {}
 
 impl PluginData {
     pub fn data(&self) -> Plugin<'_> {
@@ -140,79 +135,16 @@ impl PluginData {
     }
 }
 
-impl Drop for PluginData {
-    fn drop(&mut self) {
-        unsafe {
-            alloc::dealloc(self.alloc, self.layout);
-        }
-    }
-}
-
-struct WriteableAlloc {
-    written: usize,
-    size: usize,
-    ptr: *mut u8,
-}
-
-impl Write for WriteableAlloc {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if self.written + buf.len() > self.size {
-            return Err(io::Error::new(io::ErrorKind::WriteZero, "Buffer overflow"));
-        }
-
-        let ptr = unsafe { self.ptr.byte_add(self.written) };
-        unsafe {
-            ptr::copy(buf.as_ptr(), ptr, buf.len());
-        }
-
-        self.written += buf.len();
-        Ok(buf.len())
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        _ = self.write(buf)?;
-        Ok(())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 /// Rust function to get plugin data from from a plugin dll
 pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
-    static GRANULARITY: LazyLock<u32> = LazyLock::new(|| {
-        let mut info = SYSTEM_INFO::default();
-        unsafe {
-            GetSystemInfo(&mut info);
-        }
-
-        info.dwAllocationGranularity
-    });
-
     let mut file = File::open(dll)?;
-    let len = file.metadata()?.len() as usize;
-    let gran = (*GRANULARITY as usize).next_power_of_two();
+    let size = file.metadata()?.len() as usize;
 
-    assert!(gran > 0 && gran.is_power_of_two());
-    assert!(len.next_multiple_of(gran) <= isize::MAX as usize);
+    let mut blob = Blob::new(size)?;
 
-    let layout = unsafe { Layout::from_size_align_unchecked(len, gran) };
-    let alloc = unsafe { alloc::alloc(layout) };
+    file.read_exact(&mut blob)?;
 
-    {
-        let mut write = WriteableAlloc {
-            written: 0,
-            size: len,
-            ptr: alloc,
-        };
-
-        io::copy(&mut file, &mut write)?;
-    }
-
-    let data = unsafe { slice::from_raw_parts(alloc, len) };
-
-    let file = PeFile::from_bytes(&data).context("failed to parse file")?;
+    let file = PeFile::from_bytes(&blob).context("failed to parse file")?;
     let rva = file
         .get_export("PLUGIN_DATA")
         .context("symbol not found")?
@@ -222,10 +154,12 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
 
     let offset = file.rva_to_file_offset(rva)?;
 
-    let plugin = {
-        let ptr = unsafe { alloc.byte_add(offset).cast::<Plugin>() };
-        assert!(ptr as usize % align_of::<Plugin>() == 0);
-        // SAFETY: This is not UB to deref, however touching any RStr is as the internal pointers are wrong
+    let data = {
+        let ptr = blob[offset..].as_ptr().cast::<Plugin>();
+        assert!(ptr.is_aligned());
+        // SAFETY: We only get here until after we found the exported symbol exists. At this point we have to
+        //         trust the dll maker that the symbol is correct.
+        //         This is not UB to deref, however touching any RStr is as the internal pointers are wrong
         //         So do not access them until the address has been translated to a file offset
         unsafe { *ptr }
     };
@@ -235,47 +169,22 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
 
         let rva = file.va_to_rva(ptr as Va)?;
         let offset = file.rva_to_file_offset(rva)?;
-        let ptr = unsafe { alloc.byte_add(offset).cast::<c_char>() };
+        let ptr = blob[offset..].as_ptr().cast::<c_char>();
 
         Ok(unsafe { RStr::from_ptr(ptr) })
     };
 
-    let plugin = Plugin {
-        data_ver: plugin.data_ver,
-        name: va_to_rstr(plugin.name.ptr)?,
-        author: va_to_rstr(plugin.author.ptr)?,
-        description: va_to_rstr(plugin.description.ptr)?,
-        version: plugin.version,
+    let data = Plugin {
+        data_ver: data.data_ver,
+        name: va_to_rstr(data.name.ptr)?,
+        author: va_to_rstr(data.author.ptr)?,
+        description: va_to_rstr(data.description.ptr)?,
+        version: data.version,
     };
 
-    let data = PluginData {
-        alloc,
-        layout,
-        data: plugin,
-    };
+    let data = PluginData { blob, data };
 
     Ok(data)
-}
-
-/// Convert static string to compile time array
-#[doc(hidden)]
-pub const fn convert_str<const N: usize>(string: &'static str) -> [u8; N] {
-    assert!(
-        string.len() < N,
-        "String len must be < total available space"
-    );
-
-    let mut arr = [0u8; N];
-    let mut i = 0;
-    let bytes = string.as_bytes();
-
-    let len = bytes.len();
-    while i < len {
-        arr[i] = bytes[i];
-        i += 1;
-    }
-
-    arr
 }
 
 #[doc(hidden)]
