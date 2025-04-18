@@ -3,16 +3,17 @@ mod c;
 mod rstr;
 
 use std::{
+    array::TryFromSliceError,
     ffi::c_char,
     fmt::{self, Debug},
     fs::File,
-    io::Read as _,
+    io::{self, Read as _},
     path::Path,
     ptr::NonNull,
 };
 
 use blob::Blob;
-use eyre::{Context, Result, ensure};
+use eyre::{Context as _, Report, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use pelite::{
     pe::{Pe as _, PeFile, Va},
@@ -106,8 +107,26 @@ impl PluginData {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum PluginError {
+    #[error("{0}")]
+    Report(#[from] Report),
+    #[error("{0}")]
+    Io(#[from] io::Error),
+    #[error("{0}")]
+    Pelite(#[from] pelite::Error),
+    #[error("Symbol not found in file")]
+    SymbolNotFound,
+    #[error("{0}")]
+    SliceErr(#[from] TryFromSliceError),
+    #[error(
+        "Plugin data version is either invalid ({0}), or you need to update to the newest native plugin lib"
+    )]
+    DataVer(usize),
+}
+
 /// Rust function to get plugin data from from a plugin dll
-pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
+pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError> {
     let mut file = File::open(dll)?;
     let size = file.metadata()?.len() as usize;
 
@@ -118,10 +137,10 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
     let file = PeFile::from_bytes(&blob).context("failed to parse file")?;
     let rva = file
         .get_export("PLUGIN_DATA")
-        .context("symbol not found")?
+        .map_err(|_| PluginError::SymbolNotFound)?
         .symbol()
         .ok_or(pelite::Error::Null)
-        .context("failed to find symbol address")?;
+        .map_err(|_| PluginError::SymbolNotFound)?;
 
     let offset = file.rva_to_file_offset(rva)?;
 
@@ -133,10 +152,11 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
     // or this library is out of date. It's more likely to be that it's out of date.
     //
     // Do this check first before dereferencing to ensure that dereferenced data is always a valid T
-    ensure!(
-        data_ver <= DATA_VERSION,
-        "Native Plugin Lib is out of date, please update to a newer version"
-    );
+
+    let versions = const { gen_versions() };
+    if !versions.contains(&data_ver) {
+        return Err(PluginError::DataVer(data_ver));
+    }
 
     // Below this line we will handle any future data version changes properly
 
@@ -176,4 +196,15 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
 #[doc(hidden)]
 pub const fn convert_str_to_u16(string: &'static str) -> u16 {
     unwrap_ctx!(parse_u16(string))
+}
+
+const fn gen_versions() -> [usize; DATA_VERSION] {
+    let mut arr = [0; DATA_VERSION];
+    let mut i = 0;
+    while i < DATA_VERSION {
+        arr[i] = i + 1;
+        i += 1;
+    }
+
+    arr
 }

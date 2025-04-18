@@ -10,6 +10,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 konst = { version = "0.3.16", features = ["parsing"] }
 pelite = "0.10.0"
 eyre = "0.6.12"
+thiserror = "2.0.12"
 
 [dependencies.windows]
 version = "0.61.1"
