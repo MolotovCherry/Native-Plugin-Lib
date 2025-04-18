@@ -67,10 +67,6 @@ pub struct Version {
 /// ```rs
 /// declare_plugin!("name", "author", "description");
 /// ```
-/// You can also use it without to use the Cargo.toml name, authors, and description fields
-/// ```rs
-/// declare_plugin!();
-/// ```
 ///
 /// env!() macro is also possible to use by itself if you need more customization
 /// ```rs
@@ -85,28 +81,9 @@ macro_rules! declare_plugin {
             #[unsafe(no_mangle)]
             static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
                 data_ver: $crate::DATA_VERSION,
-                name: unsafe { $crate::RStr::from_str(concat!($name, "\0")) },
-                author: unsafe { $crate::RStr::from_str(concat!($author, "\0")) },
-                description: unsafe { $crate::RStr::from_str(concat!($desc, "\0")) },
-                version: $crate::Version {
-                    major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
-                    minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
-                    patch: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_PATCH")),
-                },
-            };
-        };
-    };
-
-    () => {
-        const _: () = {
-            #[unsafe(no_mangle)]
-            static PLUGIN_DATA: $crate::Plugin<'static> = $crate::Plugin {
-                data_ver: $crate::DATA_VERSION,
-                name: unsafe { $crate::RStr::from_str(concat!(env!("CARGO_PKG_NAME"), "\0")) },
-                author: unsafe { $crate::RStr::from_str(concat!(env!("CARGO_PKG_AUTHORS"), "\0")) },
-                description: unsafe {
-                    $crate::RStr::from_str(concat!(env!("CARGO_PKG_DESCRIPTION"), "\0"))
-                },
+                name: unsafe { $crate::PStr::from_str(concat!($name, "\0")) },
+                author: unsafe { $crate::PStr::from_str(concat!($author, "\0")) },
+                description: unsafe { $crate::PStr::from_str(concat!($desc, "\0")) },
                 version: $crate::Version {
                     major: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MAJOR")),
                     minor: $crate::convert_str_to_u16(env!("CARGO_PKG_VERSION_MINOR")),
