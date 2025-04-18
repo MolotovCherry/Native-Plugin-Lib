@@ -145,7 +145,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
     let offset = file.rva_to_file_offset(rva)?;
 
     const _USIZE: usize = size_of::<usize>();
-    let _data_ver: [u8; _USIZE] = blob[offset.._USIZE].try_into()?;
+    let _data_ver: [u8; _USIZE] = blob[offset..offset + _USIZE].try_into()?;
     let data_ver = usize::from_ne_bytes(_data_ver);
 
     // Either the file data is incorrect (corrupted or just flat out wrong)
