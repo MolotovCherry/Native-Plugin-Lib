@@ -12,7 +12,7 @@ use std::{
 };
 
 use blob::Blob;
-use eyre::{Context, Result};
+use eyre::{Context, Result, ensure};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use pelite::{
     pe::{Pe as _, PeFile, Va},
@@ -154,12 +154,27 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
 
     let offset = file.rva_to_file_offset(rva)?;
 
+    const _USIZE: usize = size_of::<usize>();
+    let _data_ver: [u8; _USIZE] = blob[offset.._USIZE].try_into()?;
+    let data_ver = usize::from_ne_bytes(_data_ver);
+
+    // Either the file data is incorrect (corrupted or just flat out wrong)
+    // or this library is out of date. It's more likely to be that it's out of date.
+    //
+    // Do this check first before dereferencing to ensure that dereferenced data is always a valid T
+    ensure!(
+        data_ver <= DATA_VERSION,
+        "Native Plugin Lib is out of date, please update to a newer version"
+    );
+
+    // Below this line we will handle any future data version changes properly
+
     let data = {
         let ptr = blob[offset..].as_ptr().cast::<Plugin>();
         assert!(ptr.is_aligned());
         // SAFETY: We only get here until after we found the exported symbol exists. At this point we have to
-        //         trust the dll maker that the symbol is correct.
-        //         This is not UB to deref, however touching any RStr is as the internal pointers are wrong
+        //         trust that the dll symbol has the correct data
+        //         This is not UB to deref, however reading any RStr is as the internal pointers are wrong
         //         So do not access them until the address has been translated to a file offset
         unsafe { *ptr }
     };
