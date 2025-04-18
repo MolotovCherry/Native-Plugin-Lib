@@ -12,6 +12,12 @@
 
 typedef struct PluginData PluginData;
 
+typedef struct Version {
+  uint16_t major;
+  uint16_t minor;
+  uint16_t patch;
+} Version;
+
 /**
  * utf8 null terminated string.
  *
@@ -20,13 +26,7 @@ typedef struct PluginData PluginData;
  * Contains no internal nulls
  * Contains a null terminator
  */
-typedef const char *RStr;
-
-typedef struct Version {
-  uint16_t major;
-  uint16_t minor;
-  uint16_t patch;
-} Version;
+typedef char *RStr;
 
 /**
  * Plugin details; DATA_VERSION 1
@@ -46,14 +46,6 @@ typedef struct Plugin {
   struct Version version;
 } Plugin;
 
-/**
- * Holds the plugin data
- */
-typedef struct PluginGuard {
-  struct Plugin data;
-  struct PluginData _reserved;
-} PluginGuard;
-
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -64,21 +56,53 @@ extern "C" {
  * Takes in a path to the dll, encoded as UTF16, with length `len`
  * Returns null pointer if it failed, non-null if it succeeded.
  * If it failed, either the plugin didn't declare it, it's not a plugin made with Rust Native template,
- * or the file does not exist.
+ * the file does not exist, or you need to update the native plugin lib since the data version is too high
  *
  * # Safety
  * `len` must be the correct. this is the number of u16 elems, _not_ the number of bytes
  */
-const struct PluginGuard *get_plugin_data(const uint16_t *dll,
-                                          uintptr_t len);
+const struct PluginData *get_plugin_data(const uint16_t *dll,
+                                         uintptr_t len);
 
 /**
- * Free the memory used by PluginGuard
+ * Get the plugin name
  *
  * # Safety
- * Must be pointer to a valid instance of PluginGuard
+ * Must be pointer to a valid instance of PluginData
  */
-void free_plugin(const struct PluginGuard *plugin);
+const char *get_plugin_name(const struct PluginData *data);
+
+/**
+ * Get the plugin author
+ *
+ * # Safety
+ * Must be pointer to a valid instance of PluginData
+ */
+const char *get_plugin_author(const struct PluginData *data);
+
+/**
+ * Get the plugin description
+ *
+ * # Safety
+ * Must be pointer to a valid instance of PluginData
+ */
+const char *get_plugin_description(const struct PluginData *data);
+
+/**
+ * Get the plugin version
+ *
+ * # Safety
+ * Must be pointer to a valid instance of PluginData
+ */
+const struct Version *get_plugin_version(const struct PluginData *data);
+
+/**
+ * Free the memory used by PluginData
+ *
+ * # Safety
+ * Must be pointer to a valid instance of PluginData
+ */
+void free_plugin_data(const struct PluginData *data);
 
 #ifdef __cplusplus
 }  // extern "C"
