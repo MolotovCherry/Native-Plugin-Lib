@@ -15,7 +15,7 @@ pub struct Blob {
 }
 
 impl Blob {
-    pub fn new(size: usize) -> Result<Self> {
+    pub fn new_zeroed(size: usize) -> Result<Self> {
         static GRANULARITY: LazyLock<u32> = LazyLock::new(|| {
             let mut info = SYSTEM_INFO::default();
             unsafe {

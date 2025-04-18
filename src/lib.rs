@@ -140,7 +140,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData> {
     let mut file = File::open(dll)?;
     let size = file.metadata()?.len() as usize;
 
-    let mut blob = Blob::new(size)?;
+    let mut blob = Blob::new_zeroed(size)?;
 
     file.read_exact(&mut blob)?;
 
