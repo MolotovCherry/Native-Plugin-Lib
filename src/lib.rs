@@ -211,7 +211,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
 
     // Below this line we will handle any future data version changes properly
 
-    let data = Plugin::from_raw(&blob, |ptr| {
+    let data = Plugin::from_raw(&blob[offset..], |ptr| {
         let rva = file.va_to_rva(ptr).ok()?;
         let offset = file.rva_to_file_offset(rva).ok()?;
 
