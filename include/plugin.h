@@ -39,7 +39,7 @@ typedef struct Plugin {
   /**
    * This MUST be set to `DATA_VERSION`
    */
-  uintptr_t data_ver;
+  uint64_t data_ver;
   RStr name;
   RStr author;
   RStr description;
