@@ -42,7 +42,7 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const Plug
 #[unsafe(no_mangle)]
 unsafe extern "C" fn get_plugin_name(data: *const PluginData) -> *const c_char {
     let data = unsafe { &*data };
-    data.data().name.ptr.as_ptr()
+    data.plugin().name.ptr.as_ptr()
 }
 
 /// Get the plugin author
@@ -52,7 +52,7 @@ unsafe extern "C" fn get_plugin_name(data: *const PluginData) -> *const c_char {
 #[unsafe(no_mangle)]
 unsafe extern "C" fn get_plugin_author(data: *const PluginData) -> *const c_char {
     let data = unsafe { &*data };
-    data.data().author.ptr.as_ptr()
+    data.plugin().author.ptr.as_ptr()
 }
 
 /// Get the plugin description
@@ -62,7 +62,7 @@ unsafe extern "C" fn get_plugin_author(data: *const PluginData) -> *const c_char
 #[unsafe(no_mangle)]
 unsafe extern "C" fn get_plugin_description(data: *const PluginData) -> *const c_char {
     let data = unsafe { &*data };
-    data.data().description.ptr.as_ptr()
+    data.plugin().description.ptr.as_ptr()
 }
 
 /// Get the plugin version
@@ -72,7 +72,7 @@ unsafe extern "C" fn get_plugin_description(data: *const PluginData) -> *const c
 #[unsafe(no_mangle)]
 unsafe extern "C" fn get_plugin_version(data: *const PluginData) -> *const Version {
     let data = unsafe { &*data };
-    &data.data().version
+    &data.plugin().version
 }
 
 /// Free the memory used by PluginData

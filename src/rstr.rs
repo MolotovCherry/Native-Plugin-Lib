@@ -1,5 +1,5 @@
 use std::{
-    ffi::{c_char, CStr},
+    ffi::{CStr, c_char},
     fmt::{self, Debug, Display},
     marker::PhantomData,
     ops::Deref,
@@ -27,18 +27,9 @@ impl<'a> RStr<'a> {
     /// # Safety
     /// string must contain null terminator
     #[doc(hidden)]
-    pub const unsafe fn from_str(data: &'static str) -> Self {
+    pub const unsafe fn from_str(data: &str) -> Self {
         let ptr = data.as_ptr().cast::<c_char>();
 
-        Self {
-            ptr: unsafe { NonNull::new_unchecked(ptr.cast_mut()) },
-            _marker: PhantomData,
-        }
-    }
-
-    /// # Safety
-    /// Ptr must be non-null and have a null terminator
-    pub(crate) unsafe fn from_ptr(ptr: *const c_char) -> Self {
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr.cast_mut()) },
             _marker: PhantomData,

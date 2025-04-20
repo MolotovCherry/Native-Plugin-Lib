@@ -3,28 +3,39 @@ mod c;
 mod rstr;
 
 use std::{
-    array::TryFromSliceError,
-    ffi::c_char,
     fmt::{self, Debug},
     fs::File,
-    io::{self, Read as _},
+    io::{self, Cursor, Read as _},
+    mem,
     path::Path,
-    ptr::NonNull,
 };
 
 use blob::Blob;
+use byteorder::{LittleEndian, ReadBytesExt as _};
 use eyre::{Context as _, Report, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use pelite::{
-    pe::{Pe as _, PeFile, Va},
+    pe::{Pe as _, PeFile},
     pe64::exports::GetProcAddress,
 };
 
 pub use crate::rstr::RStr;
 
+#[cfg(not(target_pointer_width = "64"))]
+compile_error!("32-bit is not supported");
+
+/// Check condition, if condition fails, return None
+macro_rules! ensure_opt {
+    ($cond:expr) => {
+        if !$cond {
+            return None;
+        }
+    };
+}
+
 /// The plugin data version
 #[doc(hidden)]
-pub const DATA_VERSION: usize = 1;
+pub const DATA_VERSION: u64 = 1;
 
 /// Plugin details; DATA_VERSION 1
 ///
@@ -36,11 +47,48 @@ pub const DATA_VERSION: usize = 1;
 pub struct Plugin<'a> {
     /// This MUST be set to `DATA_VERSION`
     #[doc(hidden)]
-    pub data_ver: usize,
+    pub data_ver: u64,
     pub name: RStr<'a>,
     pub author: RStr<'a>,
     pub description: RStr<'a>,
     pub version: Version,
+}
+
+impl<'a> Plugin<'a> {
+    /// Safely convert from raw data to Plugin
+    fn from_raw(data: &'a [u8], to_rstr: impl Fn(u64) -> Option<RStr<'a>>) -> Option<Self> {
+        let mut data = Cursor::new(data);
+
+        let version = data.read_u64::<LittleEndian>().ok()?;
+
+        // while these ptrs are guaranteed not null, they are not guaranteed to be valid
+        let mut get_rstr = || {
+            let ptr = data.read_u64::<LittleEndian>().ok()?;
+            to_rstr(ptr)
+        };
+
+        let name = get_rstr()?;
+        let author = get_rstr()?;
+        let description = get_rstr()?;
+
+        let major = data.read_u16::<LittleEndian>().ok()?;
+        let minor = data.read_u16::<LittleEndian>().ok()?;
+        let patch = data.read_u16::<LittleEndian>().ok()?;
+
+        let this = Self {
+            data_ver: version,
+            name,
+            author,
+            description,
+            version: Version {
+                major,
+                minor,
+                patch,
+            },
+        };
+
+        Some(this)
+    }
 }
 
 impl Debug for Plugin<'_> {
@@ -98,12 +146,12 @@ macro_rules! declare_plugin {
 pub struct PluginData {
     #[allow(unused)]
     blob: Blob,
-    data: Plugin<'static>,
+    plugin: Plugin<'static>,
 }
 
 impl PluginData {
-    pub fn data(&self) -> Plugin<'_> {
-        self.data
+    pub fn plugin(&self) -> Plugin<'_> {
+        self.plugin
     }
 }
 
@@ -111,18 +159,18 @@ impl PluginData {
 pub enum PluginError {
     #[error("{0}")]
     Report(#[from] Report),
+    #[error("Data is corrupt")]
+    DataCorrupt,
     #[error("{0}")]
     Io(#[from] io::Error),
     #[error("{0}")]
     Pelite(#[from] pelite::Error),
     #[error("Symbol not found in file")]
     SymbolNotFound,
-    #[error("{0}")]
-    SliceErr(#[from] TryFromSliceError),
     #[error(
         "Plugin data version is either invalid ({0}), or you need to update to the newest native plugin lib"
     )]
-    DataVer(usize),
+    DataVer(u64),
 }
 
 /// Rust function to get plugin data from from a plugin dll
@@ -139,14 +187,17 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
         .get_export("PLUGIN_DATA")
         .map_err(|_| PluginError::SymbolNotFound)?
         .symbol()
-        .ok_or(pelite::Error::Null)
-        .map_err(|_| PluginError::SymbolNotFound)?;
+        .ok_or(PluginError::SymbolNotFound)?;
 
     let offset = file.rva_to_file_offset(rva)?;
 
     const _USIZE: usize = size_of::<usize>();
-    let _data_ver: [u8; _USIZE] = blob[offset..offset + _USIZE].try_into()?;
-    let data_ver = usize::from_ne_bytes(_data_ver);
+    let _data_ver: [u8; _USIZE] = blob
+        .get(offset..offset + _USIZE)
+        .ok_or(PluginError::SymbolNotFound)?
+        .try_into()
+        .unwrap();
+    let data_ver = u64::from_ne_bytes(_data_ver);
 
     // Either the file data is incorrect (corrupted or just flat out wrong)
     // or this library is out of date. It's more likely to be that it's out of date.
@@ -160,35 +211,41 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
 
     // Below this line we will handle any future data version changes properly
 
-    let data = {
-        let ptr = blob[offset..].as_ptr().cast::<Plugin>();
-        assert!(ptr.is_aligned());
-        // SAFETY: We only get here until after we found the exported symbol exists. At this point we have to
-        //         trust that the dll symbol has the correct data
-        //         This is not UB to deref, however reading any RStr is as the internal pointers are wrong
-        //         So do not access them until the address has been translated to a file offset
-        unsafe { *ptr }
-    };
+    let data = Plugin::from_raw(&blob, |ptr| {
+        let rva = file.va_to_rva(ptr).ok()?;
+        let offset = file.rva_to_file_offset(rva).ok()?;
 
-    let va_to_rstr = |ptr: NonNull<c_char>| -> Result<RStr> {
-        let ptr = ptr.as_ptr();
+        let data = blob.get(offset..)?;
 
-        let rva = file.va_to_rva(ptr as Va)?;
-        let offset = file.rva_to_file_offset(rva)?;
-        let ptr = blob[offset..].as_ptr().cast::<c_char>();
+        // just keep scanning until \0. If there is one, we have a null terminator
+        let mut end = None;
+        for (i, byte) in data.iter().enumerate() {
+            if *byte == 0 {
+                end = Some(i);
+                break;
+            }
+        }
 
-        Ok(unsafe { RStr::from_ptr(ptr) })
-    };
+        let end = end?;
 
-    let data = Plugin {
-        data_ver: data.data_ver,
-        name: va_to_rstr(data.name.ptr)?,
-        author: va_to_rstr(data.author.ptr)?,
-        description: va_to_rstr(data.description.ptr)?,
-        version: data.version,
-    };
+        // now we have to check for utf8 validity.
+        // make sure to include the null terminator as we need it below
+        let slice = data.get(..=end)?;
+        let c_str = std::str::from_utf8(slice).ok()?;
 
-    let data = PluginData { blob, data };
+        // make sure the last byte is a null terminator for safety reasons
+        ensure_opt!(*slice.last()? == 0);
+
+        // Safety: String contains a null terminator
+        let rstr = unsafe { RStr::from_str(c_str) };
+        Some(rstr)
+    })
+    .ok_or(PluginError::DataCorrupt)?;
+
+    // Safety: this is packaged along together with blob and dropped at the same time
+    let plugin: Plugin<'static> = unsafe { mem::transmute(data) };
+
+    let data = PluginData { blob, plugin };
 
     Ok(data)
 }
@@ -198,11 +255,11 @@ pub const fn convert_str_to_u16(string: &'static str) -> u16 {
     unwrap_ctx!(parse_u16(string))
 }
 
-const fn gen_versions() -> [usize; DATA_VERSION] {
-    let mut arr = [0; DATA_VERSION];
-    let mut i = 0;
+const fn gen_versions() -> [u64; DATA_VERSION as usize] {
+    let mut arr = [0; DATA_VERSION as usize];
+    let mut i = 0u64;
     while i < DATA_VERSION {
-        arr[i] = i + 1;
+        arr[i as usize] = i + 1;
         i += 1;
     }
 
