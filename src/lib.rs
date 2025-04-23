@@ -10,16 +10,17 @@ use std::{
     path::Path,
 };
 
-use blob::Blob;
 use byteorder::{LittleEndian, ReadBytesExt as _};
 use eyre::{Context as _, Report, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
+use memchr::memchr;
 use pelite::{
     pe::{Pe as _, PeFile},
     pe64::exports::GetProcAddress,
 };
 
 pub use crate::rstr::RStr;
+use blob::Blob;
 
 #[cfg(not(target_pointer_width = "64"))]
 compile_error!("32-bit is not supported");
@@ -215,22 +216,12 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
         let rva = file.va_to_rva(ptr).ok()?;
         let offset = file.rva_to_file_offset(rva).ok()?;
 
-        let data = blob.get(offset..)?;
-
         // just keep scanning until \0. If there is one, we have a null terminator
-        let mut end = None;
-        for (i, byte) in data.iter().enumerate() {
-            if *byte == 0 {
-                end = Some(i);
-                break;
-            }
-        }
-
-        let end = end?;
+        let end = memchr(0, blob.get(offset..)?)?;
 
         // now we have to check for utf8 validity.
         // make sure to include the null terminator as we need it below
-        let slice = data.get(..=end)?;
+        let slice = blob.get(offset..=end)?;
         let c_str = std::str::from_utf8(slice).ok()?;
 
         // make sure the last byte is a null terminator for safety reasons
@@ -243,7 +234,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
     .ok_or(PluginError::DataCorrupt)?;
 
     // Safety: this is packaged along together with blob and dropped at the same time
-    let plugin: Plugin<'static> = unsafe { mem::transmute(data) };
+    let plugin = unsafe { mem::transmute::<Plugin<'_>, Plugin<'static>>(data) };
 
     let data = PluginData { blob, plugin };
 
