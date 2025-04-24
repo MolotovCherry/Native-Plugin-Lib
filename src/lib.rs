@@ -205,8 +205,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
     //
     // Do this check first before dereferencing to ensure that dereferenced data is always a valid T
 
-    let versions = const { gen_versions() };
-    if !versions.contains(&data_ver) {
+    if (1..=DATA_VERSION).contains(&data_ver) {
         return Err(PluginError::DataVer(data_ver));
     }
 
@@ -221,14 +220,16 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
 
         // now we have to check for utf8 validity.
         // make sure to include the null terminator as we need it below
-        let slice = blob.get(offset..=end)?;
-        let c_str = std::str::from_utf8(slice).ok()?;
+        let slice = {
+            let bytes = blob.get(offset..=end)?;
+            std::str::from_utf8(bytes).ok()?
+        };
 
         // make sure the last byte is a null terminator for safety reasons
-        ensure_opt!(*slice.last()? == 0);
+        ensure_opt!(slice.ends_with("\0"));
 
         // Safety: String contains a null terminator
-        let rstr = unsafe { RStr::from_str(c_str) };
+        let rstr = unsafe { RStr::from_str(slice) };
         Some(rstr)
     })
     .ok_or(PluginError::DataCorrupt)?;
@@ -244,15 +245,4 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
 #[doc(hidden)]
 pub const fn convert_str_to_u16(string: &'static str) -> u16 {
     unwrap_ctx!(parse_u16(string))
-}
-
-const fn gen_versions() -> [u64; DATA_VERSION as usize] {
-    let mut arr = [0; DATA_VERSION as usize];
-    let mut i = 0u64;
-    while i < DATA_VERSION {
-        arr[i as usize] = i + 1;
-        i += 1;
-    }
-
-    arr
 }
