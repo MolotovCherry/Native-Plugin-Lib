@@ -5,7 +5,7 @@ fn test_loader() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     let loader = manifest_dir.join("tests").join("loader.dll");
-    let data = native_plugin_lib::get_plugin_data(loader).unwrap();
+    let data = native_plugin_lib::PluginData::new(loader).unwrap();
 
     let plugin = data.plugin();
 

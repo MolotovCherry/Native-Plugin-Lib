@@ -4,7 +4,7 @@ use std::{
     ptr, slice,
 };
 
-use crate::{PluginData, Version, get_plugin_data as _get_plugin_data};
+use crate::{PluginData, Version};
 
 /// Get a plugin's data
 ///
@@ -20,7 +20,7 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const Plug
     let slice = unsafe { slice::from_raw_parts(dll, len) };
 
     let dll = OsString::from_wide(slice);
-    let dll = dll.to_str().map(_get_plugin_data);
+    let dll = dll.to_str().map(PluginData::new);
 
     match dll {
         Some(Ok(plugin)) => {

@@ -14,10 +14,7 @@ use byteorder::{LittleEndian, ReadBytesExt as _};
 use eyre::{Context as _, Report, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use memchr::memchr;
-use pelite::{
-    pe::{Pe as _, PeFile},
-    pe64::exports::GetProcAddress,
-};
+use pelite::pe::{Pe as _, PeFile, exports::GetProcAddress};
 
 pub use crate::rstr::RStr;
 use blob::Blob;
@@ -135,18 +132,6 @@ macro_rules! declare_plugin {
     };
 }
 
-pub struct PluginData {
-    #[allow(unused)]
-    blob: Blob,
-    plugin: Plugin<'static>,
-}
-
-impl PluginData {
-    pub fn plugin(&self) -> Plugin<'_> {
-        self.plugin
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum PluginError {
     #[error("{0}")]
@@ -165,71 +150,82 @@ pub enum PluginError {
     DataVer(u64),
 }
 
-/// Rust function to get plugin data from from a plugin dll
-pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError> {
-    let mut file = File::open(dll)?;
-    let size = file.metadata()?.len() as usize;
+pub struct PluginData {
+    plugin: Plugin<'static>,
+    #[allow(unused)]
+    blob: Blob,
+}
 
-    let mut blob = Blob::new_zeroed(size)?;
+impl PluginData {
+    pub fn new<P: AsRef<Path>>(dll: P) -> Result<Self, PluginError> {
+        let mut file = File::open(dll)?;
+        let size = file.metadata()?.len() as usize;
 
-    file.read_exact(&mut blob)?;
+        let mut blob = Blob::new_zeroed(size)?;
 
-    let file = PeFile::from_bytes(&blob).context("failed to parse file")?;
-    let rva = file
-        .get_export("PLUGIN_DATA")
-        .ok()
-        .and_then(|e| e.symbol())
-        .ok_or(PluginError::SymbolNotFound)?;
+        file.read_exact(&mut blob)?;
 
-    let offset = file.rva_to_file_offset(rva)?;
+        let file = PeFile::from_bytes(&blob).context("failed to parse file")?;
+        let rva = file
+            .get_export("PLUGIN_DATA")
+            .ok()
+            .and_then(|e| e.symbol())
+            .ok_or(PluginError::SymbolNotFound)?;
 
-    const _USIZE: usize = size_of::<usize>();
-    let _data_ver: [u8; _USIZE] = blob
-        .get(offset..offset + _USIZE)
-        .ok_or(PluginError::SymbolNotFound)?
-        .try_into()
-        .unwrap();
-    let data_ver = u64::from_ne_bytes(_data_ver);
+        let offset = file.rva_to_file_offset(rva)?;
 
-    // Either the file data is incorrect (corrupted or just flat out wrong)
-    // or this library is out of date. It's more likely to be that it's out of date.
-    //
-    // Do this check first before dereferencing to ensure that dereferenced data is always a valid T
+        const _USIZE: usize = size_of::<usize>();
+        let _data_ver: [u8; _USIZE] = blob
+            .get(offset..offset + _USIZE)
+            .ok_or(PluginError::SymbolNotFound)?
+            .try_into()
+            .unwrap();
+        let data_ver = u64::from_ne_bytes(_data_ver);
 
-    if (1..=DATA_VERSION).contains(&data_ver) {
-        return Err(PluginError::DataVer(data_ver));
+        // Either the file data is incorrect (corrupted or just flat out wrong)
+        // or this library is out of date. It's more likely to be that it's out of date.
+        //
+        // Do this check first before dereferencing to ensure that dereferenced data is always a valid T
+
+        if !(1..=DATA_VERSION).contains(&data_ver) {
+            return Err(PluginError::DataVer(data_ver));
+        }
+
+        // Below this line we will handle any future data version changes properly
+
+        let data = Plugin::from_raw(&blob[offset..], |ptr| {
+            let rva = file.va_to_rva(ptr).ok()?;
+            let offset = file.rva_to_file_offset(rva).ok()?;
+
+            // just keep scanning until \0. If there is one, we have a null terminator
+            // this returns if \0 was not found
+            let end = memchr(0, blob.get(offset..)?)?;
+
+            // now we have to check for utf8 validity.
+            // make sure to include the null terminator as we need it below
+            let rstr = {
+                let bytes = blob.get(offset..=offset + end)?;
+                std::str::from_utf8(bytes).ok()?
+            };
+
+            // Safety: String contains a null terminator
+            //         checked by memchr
+            let rstr = unsafe { RStr::from_str(rstr) };
+            Some(rstr)
+        })
+        .ok_or(PluginError::DataCorrupt)?;
+
+        // Safety: this is packaged along together with blob and dropped at the same time
+        let plugin = unsafe { mem::transmute::<Plugin<'_>, Plugin<'static>>(data) };
+
+        let data = Self { blob, plugin };
+
+        Ok(data)
     }
 
-    // Below this line we will handle any future data version changes properly
-
-    let data = Plugin::from_raw(&blob[offset..], |ptr| {
-        let rva = file.va_to_rva(ptr).ok()?;
-        let offset = file.rva_to_file_offset(rva).ok()?;
-
-        // just keep scanning until \0. If there is one, we have a null terminator
-        // this returns if \0 was not found
-        let end = memchr(0, blob.get(offset..)?)?;
-
-        // now we have to check for utf8 validity.
-        // make sure to include the null terminator as we need it below
-        let slice = {
-            let bytes = blob.get(offset..=end)?;
-            std::str::from_utf8(bytes).ok()?
-        };
-
-        // Safety: String contains a null terminator
-        //         checked by memchr
-        let rstr = unsafe { RStr::from_str(slice) };
-        Some(rstr)
-    })
-    .ok_or(PluginError::DataCorrupt)?;
-
-    // Safety: this is packaged along together with blob and dropped at the same time
-    let plugin = unsafe { mem::transmute::<Plugin<'_>, Plugin<'static>>(data) };
-
-    let data = PluginData { blob, plugin };
-
-    Ok(data)
+    pub fn plugin(&self) -> Plugin<'_> {
+        self.plugin
+    }
 }
 
 #[doc(hidden)]
