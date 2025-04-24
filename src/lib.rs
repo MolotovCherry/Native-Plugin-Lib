@@ -177,8 +177,8 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
     let file = PeFile::from_bytes(&blob).context("failed to parse file")?;
     let rva = file
         .get_export("PLUGIN_DATA")
-        .map_err(|_| PluginError::SymbolNotFound)?
-        .symbol()
+        .ok()
+        .and_then(|e| e.symbol())
         .ok_or(PluginError::SymbolNotFound)?;
 
     let offset = file.rva_to_file_offset(rva)?;
