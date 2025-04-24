@@ -25,15 +25,6 @@ use blob::Blob;
 #[cfg(not(target_pointer_width = "64"))]
 compile_error!("32-bit is not supported");
 
-/// Check condition, if condition fails, return None
-macro_rules! ensure_opt {
-    ($cond:expr) => {
-        if !$cond {
-            return None;
-        }
-    };
-}
-
 /// The plugin data version
 #[doc(hidden)]
 pub const DATA_VERSION: u64 = 1;
@@ -216,6 +207,7 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
         let offset = file.rva_to_file_offset(rva).ok()?;
 
         // just keep scanning until \0. If there is one, we have a null terminator
+        // this returns if \0 was not found
         let end = memchr(0, blob.get(offset..)?)?;
 
         // now we have to check for utf8 validity.
@@ -225,10 +217,8 @@ pub fn get_plugin_data<P: AsRef<Path>>(dll: P) -> Result<PluginData, PluginError
             std::str::from_utf8(bytes).ok()?
         };
 
-        // make sure the last byte is a null terminator for safety reasons
-        ensure_opt!(slice.ends_with("\0"));
-
         // Safety: String contains a null terminator
+        //         checked by memchr
         let rstr = unsafe { RStr::from_str(slice) };
         Some(rstr)
     })
