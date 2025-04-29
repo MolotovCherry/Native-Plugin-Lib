@@ -5,7 +5,10 @@ use std::{
 };
 
 use eyre::{Context as _, Report};
-use pelite::pe::{Pe as _, PeFile, Rva, exports::By};
+use pelite::{
+    Error as PeError,
+    pe::{Pe as _, PeFile, Rva, exports::By},
+};
 use yoke::{Yoke, Yokeable};
 
 use crate::blob::Blob;
@@ -33,7 +36,13 @@ impl Dll {
 
         let yoke = Yoke::try_attach_to_cart(blob, |data| {
             let file = PeFile::from_bytes(data).context("failed to parse file")?;
-            let by = file.exports()?.by()?;
+
+            let by = match file.exports() {
+                Ok(e) => Some(e.by()?),
+                // just has no exports; not an error
+                Err(PeError::Null) => None,
+                Err(e) => return Err(e.into()),
+            };
 
             let dll_file = DllRef { file, exports: by };
 
@@ -46,13 +55,13 @@ impl Dll {
     /// Checks if symbol exists
     pub fn symbol_exists(&self, name: &str) -> bool {
         let file = self.0.get();
-        file.exports.name(name).is_ok()
+        file.exports.is_some_and(|e| e.name(name).is_ok())
     }
 
     /// Gets rva for symbol
     pub fn symbol_rva(&self, name: &str) -> Option<Rva> {
         let file = self.0.get();
-        let rva = file.exports.name(name).ok().and_then(|e| e.symbol())?;
+        let rva = file.exports?.name(name).ok().and_then(|e| e.symbol())?;
 
         Some(rva)
     }
@@ -71,5 +80,5 @@ impl Dll {
 #[derive(Copy, Clone, Yokeable)]
 pub struct DllRef<'a> {
     pub file: PeFile<'a>,
-    pub exports: By<'a, PeFile<'a>>,
+    pub exports: Option<By<'a, PeFile<'a>>>,
 }
