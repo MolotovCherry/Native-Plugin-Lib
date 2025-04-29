@@ -10,6 +10,7 @@ use std::{
 };
 
 use byteorder::{LittleEndian, ReadBytesExt as _};
+use dll::DllError;
 use eyre::{Report, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use memchr::memchr;
@@ -150,10 +151,12 @@ pub enum PluginError {
         "Plugin data version is either invalid ({0}), or you need to update to the newest native plugin lib"
     )]
     DataVer(u64),
+    #[error("{0}")]
+    Dll(#[from] DllError),
 }
 
 pub struct PluginData {
-    plugin: Yoke<Plugin<'static>, Dll>,
+    plugin: Yoke<Plugin<'static>, Box<Dll>>,
 }
 
 impl PluginData {
@@ -163,13 +166,15 @@ impl PluginData {
     }
 
     pub fn from_dll(dll: Dll) -> Result<Self, PluginError> {
-        let rva = dll.symbol_rva("PLUGIN_DATA")?;
+        let rva = dll
+            .symbol_rva("PLUGIN_DATA")
+            .ok_or(PluginError::SymbolNotFound)?;
 
         let offset = dll.object().file.rva_to_file_offset(rva)?;
 
         const _USIZE: usize = size_of::<usize>();
         let _data_ver: [u8; _USIZE] = dll
-            .cart()
+            .mem()
             .get(offset..offset + _USIZE)
             .ok_or(PluginError::SymbolNotFound)?
             .try_into()
@@ -187,9 +192,9 @@ impl PluginData {
 
         // Below this line we will handle any future data version changes properly
 
-        let yoke = Yoke::try_attach_to_cart(dll, |data| {
-            let blob = data.backing_cart();
-            let file = data.get().file;
+        let yoke = Yoke::try_attach_to_cart(Box::new(dll), |data| {
+            let blob = data.mem();
+            let file = data.object().file;
 
             let data = Plugin::from_raw(&blob[offset..], |ptr| {
                 let rva = file.va_to_rva(ptr).ok()?;

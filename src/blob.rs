@@ -15,7 +15,7 @@ pub struct Blob {
     data: NonNull<u8>,
 }
 
-// Safety: Blob is heap allocated
+// Safety: Blob is heap allocated and derefs to the backing mem
 unsafe impl StableDeref for Blob {}
 
 impl Blob {

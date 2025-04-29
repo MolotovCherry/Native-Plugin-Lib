@@ -36,6 +36,7 @@ impl<'a> RStr<'a> {
         }
     }
 
+    /// Gets as &str. Note that this does a runtime calculation every time it's called
     fn as_str(&self) -> &'a str {
         let cstr = unsafe { CStr::from_ptr(self.ptr.as_ptr()) };
         unsafe { str::from_utf8_unchecked(cstr.to_bytes()) }
