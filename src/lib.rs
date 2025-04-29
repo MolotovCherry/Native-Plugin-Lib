@@ -1,23 +1,25 @@
 mod blob;
 mod c;
+mod dll;
 mod rstr;
 
 use std::{
     fmt::{self, Debug},
-    fs::File,
-    io::{self, Cursor, Read as _},
-    mem,
+    io::{self, Cursor},
     path::Path,
 };
 
 use byteorder::{LittleEndian, ReadBytesExt as _};
-use eyre::{Context as _, Report, Result};
+use eyre::{Report, Result};
 use konst::{primitive::parse_u16, unwrap_ctx};
 use memchr::memchr;
-use pelite::pe::{Pe as _, PeFile, exports::GetProcAddress};
+use pelite::pe::Pe as _;
+use yoke::{Yoke, Yokeable};
 
-pub use crate::rstr::RStr;
-use blob::Blob;
+pub use crate::{
+    dll::{Dll, DllRef},
+    rstr::RStr,
+};
 
 #[cfg(not(target_pointer_width = "64"))]
 compile_error!("32-bit is not supported");
@@ -32,7 +34,7 @@ pub const DATA_VERSION: u64 = 1;
 /// export a symbol named PLUGIN_DATA containing
 /// this data.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Yokeable)]
 pub struct Plugin<'a> {
     /// This MUST be set to `DATA_VERSION`
     #[doc(hidden)]
@@ -151,31 +153,23 @@ pub enum PluginError {
 }
 
 pub struct PluginData {
-    plugin: Plugin<'static>,
-    #[allow(unused)]
-    blob: Blob,
+    plugin: Yoke<Plugin<'static>, Dll>,
 }
 
 impl PluginData {
-    pub fn new<P: AsRef<Path>>(dll: P) -> Result<Self, PluginError> {
-        let mut file = File::open(dll)?;
-        let size = file.metadata()?.len() as usize;
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, PluginError> {
+        let dll = Dll::new(path)?;
+        Self::from_dll(dll)
+    }
 
-        let mut blob = Blob::new_zeroed(size)?;
+    pub fn from_dll(dll: Dll) -> Result<Self, PluginError> {
+        let rva = dll.symbol_rva("PLUGIN_DATA")?;
 
-        file.read_exact(&mut blob)?;
-
-        let file = PeFile::from_bytes(&blob).context("failed to parse file")?;
-        let rva = file
-            .get_export("PLUGIN_DATA")
-            .ok()
-            .and_then(|e| e.symbol())
-            .ok_or(PluginError::SymbolNotFound)?;
-
-        let offset = file.rva_to_file_offset(rva)?;
+        let offset = dll.object().file.rva_to_file_offset(rva)?;
 
         const _USIZE: usize = size_of::<usize>();
-        let _data_ver: [u8; _USIZE] = blob
+        let _data_ver: [u8; _USIZE] = dll
+            .cart()
             .get(offset..offset + _USIZE)
             .ok_or(PluginError::SymbolNotFound)?
             .try_into()
@@ -193,38 +187,46 @@ impl PluginData {
 
         // Below this line we will handle any future data version changes properly
 
-        let data = Plugin::from_raw(&blob[offset..], |ptr| {
-            let rva = file.va_to_rva(ptr).ok()?;
-            let offset = file.rva_to_file_offset(rva).ok()?;
+        let yoke = Yoke::try_attach_to_cart(dll, |data| {
+            let blob = data.backing_cart();
+            let file = data.get().file;
 
-            // just keep scanning until \0. If there is one, we have a null terminator
-            // this returns if \0 was not found
-            let end = memchr(0, blob.get(offset..)?)?;
+            let data = Plugin::from_raw(&blob[offset..], |ptr| {
+                let rva = file.va_to_rva(ptr).ok()?;
+                let offset = file.rva_to_file_offset(rva).ok()?;
 
-            // now we have to check for utf8 validity.
-            // make sure to include the null terminator as we need it below
-            let rstr = {
-                let bytes = blob.get(offset..=offset + end)?;
-                std::str::from_utf8(bytes).ok()?
-            };
+                // just keep scanning until \0. If there is one, we have a null terminator
+                // this returns if \0 was not found
+                let end = memchr(0, blob.get(offset..)?)?;
 
-            // Safety: String contains a null terminator
-            //         checked by memchr
-            let rstr = unsafe { RStr::from_str(rstr) };
-            Some(rstr)
-        })
-        .ok_or(PluginError::DataCorrupt)?;
+                // now we have to check for utf8 validity.
+                // make sure to include the null terminator as we need it below
+                let rstr = {
+                    let bytes = blob.get(offset..=offset + end)?;
+                    std::str::from_utf8(bytes).ok()?
+                };
 
-        // Safety: this is packaged along together with blob and dropped at the same time
-        let plugin = unsafe { mem::transmute::<Plugin<'_>, Plugin<'static>>(data) };
+                // Safety: String contains a null terminator
+                //         checked by memchr
+                let rstr = unsafe { RStr::from_str(rstr) };
+                Some(rstr)
+            })
+            .ok_or(PluginError::DataCorrupt)?;
 
-        let data = Self { blob, plugin };
+            Ok::<Plugin<'_>, PluginError>(data)
+        })?;
 
-        Ok(data)
+        let this = Self { plugin: yoke };
+
+        Ok(this)
     }
 
     pub fn plugin(&self) -> Plugin<'_> {
-        self.plugin
+        *self.plugin.get()
+    }
+
+    pub fn dll(&self) -> &Dll {
+        self.plugin.backing_cart()
     }
 }
 
