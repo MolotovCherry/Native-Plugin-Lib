@@ -1,7 +1,7 @@
 use std::{
     ffi::{OsString, c_char},
     os::windows::prelude::OsStringExt as _,
-    slice,
+    ptr, slice,
 };
 
 use crate::{PluginData, Version};
@@ -16,16 +16,23 @@ use crate::{PluginData, Version};
 /// # Safety
 /// `len` must be the correct. this is the number of u16 elems, _not_ the number of bytes
 #[unsafe(no_mangle)]
-unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> Option<Box<PluginData>> {
+unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> *const PluginData {
     let slice = unsafe { slice::from_raw_parts(dll, len) };
 
     let dll = OsString::from_wide(slice);
-    dll.to_str()
+    let data = dll
+        .to_str()
         .map(PluginData::new)
         .transpose()
         .ok()
         .flatten()
         .map(Box::new)
+        .map(Box::into_raw);
+
+    match data {
+        Some(data) => data,
+        None => ptr::null(),
+    }
 }
 
 /// Get the plugin name
@@ -33,9 +40,8 @@ unsafe extern "C" fn get_plugin_data(dll: *const u16, len: usize) -> Option<Box<
 /// # Safety
 /// Must be pointer to a valid instance of PluginData
 #[unsafe(no_mangle)]
-unsafe extern "C" fn get_plugin_name(data: *mut PluginData) -> *const c_char {
-    let data = unsafe { &*data };
-    data.plugin().name.ptr.as_ptr()
+extern "C" fn get_plugin_name(data: &PluginData) -> *const c_char {
+    data.plugin().name.as_ptr()
 }
 
 /// Get the plugin author
@@ -43,9 +49,8 @@ unsafe extern "C" fn get_plugin_name(data: *mut PluginData) -> *const c_char {
 /// # Safety
 /// Must be pointer to a valid instance of PluginData
 #[unsafe(no_mangle)]
-unsafe extern "C" fn get_plugin_author(data: *mut PluginData) -> *const c_char {
-    let data = unsafe { &*data };
-    data.plugin().author.ptr.as_ptr()
+extern "C" fn get_plugin_author(data: &PluginData) -> *const c_char {
+    data.plugin().author.as_ptr()
 }
 
 /// Get the plugin description
@@ -53,9 +58,8 @@ unsafe extern "C" fn get_plugin_author(data: *mut PluginData) -> *const c_char {
 /// # Safety
 /// Must be pointer to a valid instance of PluginData
 #[unsafe(no_mangle)]
-unsafe extern "C" fn get_plugin_description(data: *mut PluginData) -> *const c_char {
-    let data = unsafe { &*data };
-    data.plugin().description.ptr.as_ptr()
+extern "C" fn get_plugin_description(data: &PluginData) -> *const c_char {
+    data.plugin().description.as_ptr()
 }
 
 /// Get the plugin version
@@ -63,11 +67,18 @@ unsafe extern "C" fn get_plugin_description(data: *mut PluginData) -> *const c_c
 /// # Safety
 /// Must be pointer to a valid instance of PluginData
 #[unsafe(no_mangle)]
-unsafe extern "C" fn get_plugin_version(data: *mut PluginData) -> *const Version {
-    let data = unsafe { &*data };
-    &data.plugin().version
+extern "C" fn get_plugin_version(data: &PluginData) -> &Version {
+    &data.plugin_ref().version
 }
 
-/// Free the memory used by PluginData. This is only valid for pointers made by get_plugin_data
+/// Free the memory used by PluginData.
+///
+/// # Safety
+/// Must be pointer to a valid instance of PluginData
 #[unsafe(no_mangle)]
-extern "C" fn free_plugin_data(_: Option<Box<PluginData>>) {}
+extern "C" fn free_plugin_data(data: *const PluginData) {
+    if !data.is_null() {
+        let data = unsafe { Box::from_raw(data.cast_mut()) };
+        drop(data);
+    }
+}

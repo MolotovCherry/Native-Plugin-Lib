@@ -61,8 +61,8 @@ extern "C" {
  * # Safety
  * `len` must be the correct. this is the number of u16 elems, _not_ the number of bytes
  */
-struct PluginData *get_plugin_data(const uint16_t *dll,
-                                   uintptr_t len);
+const struct PluginData *get_plugin_data(const uint16_t *dll,
+                                         uintptr_t len);
 
 /**
  * Get the plugin name
@@ -70,7 +70,7 @@ struct PluginData *get_plugin_data(const uint16_t *dll,
  * # Safety
  * Must be pointer to a valid instance of PluginData
  */
-const char *get_plugin_name(struct PluginData *data);
+const char *get_plugin_name(const struct PluginData *data);
 
 /**
  * Get the plugin author
@@ -78,7 +78,7 @@ const char *get_plugin_name(struct PluginData *data);
  * # Safety
  * Must be pointer to a valid instance of PluginData
  */
-const char *get_plugin_author(struct PluginData *data);
+const char *get_plugin_author(const struct PluginData *data);
 
 /**
  * Get the plugin description
@@ -86,7 +86,7 @@ const char *get_plugin_author(struct PluginData *data);
  * # Safety
  * Must be pointer to a valid instance of PluginData
  */
-const char *get_plugin_description(struct PluginData *data);
+const char *get_plugin_description(const struct PluginData *data);
 
 /**
  * Get the plugin version
@@ -94,12 +94,15 @@ const char *get_plugin_description(struct PluginData *data);
  * # Safety
  * Must be pointer to a valid instance of PluginData
  */
-const struct Version *get_plugin_version(struct PluginData *data);
+const struct Version *get_plugin_version(const struct PluginData *data);
 
 /**
- * Free the memory used by PluginData. This is only valid for pointers made by get_plugin_data
+ * Free the memory used by PluginData.
+ *
+ * # Safety
+ * Must be pointer to a valid instance of PluginData
  */
-void free_plugin_data(struct PluginData*);
+void free_plugin_data(const struct PluginData *data);
 
 #ifdef __cplusplus
 }  // extern "C"

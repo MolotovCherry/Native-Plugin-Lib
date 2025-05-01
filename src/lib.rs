@@ -230,6 +230,10 @@ impl PluginData {
         *self.plugin.get()
     }
 
+    pub(crate) fn plugin_ref(&self) -> &Plugin<'_> {
+        self.plugin.get()
+    }
+
     pub fn dll(&self) -> &Dll {
         self.plugin.backing_cart()
     }

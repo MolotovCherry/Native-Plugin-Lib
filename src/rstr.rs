@@ -41,6 +41,10 @@ impl<'a> RStr<'a> {
         let cstr = unsafe { CStr::from_ptr(self.ptr.as_ptr()) };
         unsafe { str::from_utf8_unchecked(cstr.to_bytes()) }
     }
+
+    pub(crate) fn as_ptr(&self) -> *const c_char {
+        self.ptr.as_ptr()
+    }
 }
 
 impl Debug for RStr<'_> {
