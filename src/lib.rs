@@ -12,7 +12,7 @@ use std::{
 use byteorder::{LittleEndian, ReadBytesExt as _};
 use dll::DllError;
 use eyre::{Report, Result};
-use konst::{primitive::parse_u16, unwrap_ctx};
+use konst::result::unwrap;
 use memchr::memchr;
 use pelite::pe::Pe as _;
 use yoke::{Yoke, Yokeable};
@@ -241,5 +241,5 @@ impl PluginData {
 
 #[doc(hidden)]
 pub const fn convert_str_to_u16(string: &'static str) -> u16 {
-    unwrap_ctx!(parse_u16(string))
+    unwrap!(u16::from_str_radix(string, 10))
 }
