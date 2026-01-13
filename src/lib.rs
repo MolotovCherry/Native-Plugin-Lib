@@ -7,6 +7,7 @@ use std::{
     fmt::{self, Debug},
     io::{self, Cursor},
     path::Path,
+    sync::OnceLock,
 };
 
 use byteorder::{LittleEndian, ReadBytesExt as _};
@@ -15,6 +16,13 @@ use eyre::{Report, Result};
 use konst::result::unwrap;
 use memchr::memchr;
 use pelite::pe::Pe as _;
+use windows::{
+    Win32::{
+        Foundation::CloseHandle,
+        System::Threading::{OpenEventW, SYNCHRONIZATION_SYNCHRONIZE},
+    },
+    core::w,
+};
 use yoke::{Yoke, Yokeable};
 
 pub use crate::{
@@ -237,6 +245,29 @@ impl PluginData {
     pub fn dll(&self) -> &Dll {
         self.plugin.backing_cart()
     }
+}
+
+/// Detects if yabg3nml injected this dll.
+/// This is safe to use from `DllMain`
+pub fn is_yabg3nml() -> bool {
+    static CACHE: OnceLock<bool> = OnceLock::new();
+
+    *CACHE.get_or_init(|| {
+        match unsafe {
+            OpenEventW(
+                SYNCHRONIZATION_SYNCHRONIZE,
+                false,
+                w!(r"Global\yet-another-bg3-native-mod-loader"),
+            )
+        } {
+            Ok(h) => {
+                _ = unsafe { CloseHandle(h) };
+                true
+            }
+
+            Err(_) => false,
+        }
+    })
 }
 
 #[doc(hidden)]

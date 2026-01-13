@@ -18,4 +18,4 @@ stable_deref_trait = "1.2.1"
 
 [dependencies.windows]
 version = "0.62.2"
-features = ["Win32_Foundation", "Win32_System_SystemInformation"]
+features = ["Win32_Foundation", "Win32_System_SystemInformation", "Win32_System_Threading"]
